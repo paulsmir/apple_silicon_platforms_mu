@@ -258,6 +258,31 @@ PlatformBootManagerBeforeConsole (
   }
 
   //
+  // BRING-UP DIAGNOSTIC: dump the resulting ConOut. The serial console's device path is
+  // byte-identical to the one its driver installs (verified), the loop above should have
+  // added it, yet its OutputString is never called -- so show what ConOut actually ends
+  // up containing.
+  //
+  {
+    UINT8  *CoBytes = NULL;
+    UINTN   CoSize  = 0;
+
+    GetEfiGlobalVariable2 (L"ConOut", (VOID **)&CoBytes, &CoSize);
+    DEBUG ((DEBUG_ERROR, "SERIALCON: ConOut variable is %d bytes:", (int)CoSize));
+    if (CoBytes != NULL) {
+      UINTN  Idx;
+
+      for (Idx = 0; Idx < CoSize; Idx++) {
+        DEBUG ((DEBUG_ERROR, " %02x", CoBytes[Idx]));
+      }
+
+      FreePool (CoBytes);
+    }
+
+    DEBUG ((DEBUG_ERROR, "\n"));
+  }
+
+  //
   // Exit PM auth before Legacy OPROM run.
   //
 
