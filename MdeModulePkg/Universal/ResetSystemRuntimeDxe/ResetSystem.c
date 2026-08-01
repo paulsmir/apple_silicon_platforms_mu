@@ -235,6 +235,20 @@ RuntimeServiceResetSystem (
   RESET_NOTIFY_ENTRY  *Entry;
 
   //
+  // BRING-UP DIAGNOSTIC: something resets the machine before BDS ever attempts a boot,
+  // and it is neither the watchdog nor a failed StartImage. Print the caller at
+  // DEBUG_ERROR so it survives a reduced debug mask; the address can then be matched
+  // against the "Loading driver at 0x..." lines in the firmware log.
+  //
+  DEBUG ((
+    DEBUG_ERROR,
+    "RESET CALLED: type=%d status=%r caller=0x%p\n",
+    ResetType,
+    ResetStatus,
+    RETURN_ADDRESS (0)
+    ));
+
+  //
   // Only do REPORT_STATUS_CODE() on first call to RuntimeServiceResetSystem()
   //
   if (mResetNotifyDepth == 0) {
