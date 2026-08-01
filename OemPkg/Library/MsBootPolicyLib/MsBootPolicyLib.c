@@ -232,6 +232,14 @@ MsBootPolicyLibIsAltBoot (
   GetButtonServiceProtocol ();
   if (gButtonService == NULL) {
     DEBUG ((DEBUG_WARN, "%a failed to locate ButtonServices protocol, assuming no presses.\n", __FUNCTION__));
+    //
+    // EXPERIMENT (bring-up only): this platform has no ButtonServices protocol at all,
+    // so AltBoot could never be requested. With no boot options and no alt boot, BDS
+    // simply calls PSCI SYSTEM_RESET (0x84000009 seen in the m1n1 log) and the machine
+    // reboots. Treat "no button service" as a request for alt boot so BDS goes to the
+    // boot menu / built-in UEFI Shell, which is already packaged in the firmware volume.
+    //
+    AltBoot = TRUE;
   } else {
     // Check if volume down was pressed before the power button when the system powered on
     Status = gButtonService->PreBootVolumeDownButtonThenPowerButtonCheck (gButtonService, &AltBoot);
