@@ -502,6 +502,21 @@ OutputString (
   UINTN                        MaxColumn;
   UINTN                        MaxRow;
 
+  //
+  // BRING-UP DIAGNOSTIC: the Shell accepts input over this console (typing "reset" works)
+  // but none of its output ever reaches the UART, while DEBUG output -- which goes
+  // straight to SerialPortLib -- does. Report the first few calls to tell apart "ConOut
+  // never routes here" from "it routes here but writes nothing".
+  //
+  {
+    STATIC UINTN  mOutputStringCalls = 0;
+
+    if (mOutputStringCalls < 3) {
+      mOutputStringCalls++;
+      DEBUG ((DEBUG_ERROR, "SERIALCON: OutputString call #%d\n", mOutputStringCalls));
+    }
+  }
+
   Size         = StrLen (String) + 1;
   OutputString = AllocatePool (Size);
   if (OutputString == NULL) {
@@ -718,6 +733,22 @@ SimpleTextInOutEntryPoint (
                   &mSimpleTextIn.WaitForKey
                   );
   ASSERT_EFI_ERROR (Status);
+  //
+  // BRING-UP DIAGNOSTIC: print the device path we install, so it can be compared byte for
+  // byte with the one the platform declares in gPlatformConsoles. ConPlatformDxe matches
+  // them exactly; any mismatch silently leaves this console out of ConOut.
+  //
+  {
+    UINT8  *Bytes = (UINT8 *)&mDevicePath;
+    UINTN   Idx;
+
+    DEBUG ((DEBUG_ERROR, "SERIALCON: driver path (%d bytes):", (int)sizeof (mDevicePath)));
+    for (Idx = 0; Idx < sizeof (mDevicePath); Idx++) {
+      DEBUG ((DEBUG_ERROR, " %02x", Bytes[Idx]));
+    }
+    DEBUG ((DEBUG_ERROR, "\n"));
+  }
+
 
   Status = gBS->InstallMultipleProtocolInterfaces (
                   &mInstallHandle,
