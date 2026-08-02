@@ -85,7 +85,7 @@ MULTIPLE_APIC_DESCRIPTION_TABLE Madt = {
         0, 0, GET_MPIDR(0, 0, 0, 0), EFI_ACPI_6_3_GIC_ENABLED, 50, 0,
         0, 0, 25, 0 /* GicRBase */, 0, 0),
     EFI_ACPI_6_3_GICC_STRUCTURE_INIT( // Icestorm-1 (Bootstrap)
-        1, 1, GET_MPIDR(0, 0, 0, 1),  0 /* disabled: single-core (SMP-under-HV unimpl) */, 54, 0,
+        1, 1, GET_MPIDR(0, 0, 0, 1),  0 /* disabled: SMP layer 2 (vGIC concurrency + SGI/IPI) missing */, 54, 0,
         0, 0, 25, 0 /* GicRBase */, 0, 0),
     EFI_ACPI_6_3_GICC_STRUCTURE_INIT( // Icestorm-2 (Bootstrap)
         2, 2, GET_MPIDR(0, 0, 0, 2),  0 /* disabled: single-core (SMP-under-HV unimpl) */, 54, 0,
