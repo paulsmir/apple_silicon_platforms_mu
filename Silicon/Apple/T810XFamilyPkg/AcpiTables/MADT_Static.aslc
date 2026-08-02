@@ -94,7 +94,7 @@ MULTIPLE_APIC_DESCRIPTION_TABLE Madt = {
         3, 3, GET_MPIDR(0, 0, 0, 3),  EFI_ACPI_6_3_GIC_ENABLED, 54, 0,
         0, 0, 25, 0 /* GicRBase */, 0, 0),
     EFI_ACPI_6_3_GICC_STRUCTURE_INIT( // Firestorm-0 (P-core cluster 0)
-        4, 4, GET_MPIDR(0, 1, 1, 0),  0 /* disabled: single-core (SMP-under-HV unimpl) */, 58, 0,
+        4, 4, GET_MPIDR(0, 1, 1, 0),  EFI_ACPI_6_3_GIC_ENABLED, 58, 0,
         0, 0, 25, 0 /* GicRBase */, 0, 0),
     EFI_ACPI_6_3_GICC_STRUCTURE_INIT( // Firestorm-1 (P-core cluster 0)
         5, 5, GET_MPIDR(0, 1, 1, 1),  0 /* disabled: single-core (SMP-under-HV unimpl) */, 62, 0,
