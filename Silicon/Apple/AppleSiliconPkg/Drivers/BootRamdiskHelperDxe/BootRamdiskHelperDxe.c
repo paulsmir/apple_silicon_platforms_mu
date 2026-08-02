@@ -54,6 +54,46 @@ BootRamdiskHelperDxeInitialize (
         DEBUG((DEBUG_ERROR, "BootRamdiskHelperDxe - FV not configured for ramdisk boot, exiting\n"));
         return EFI_UNSUPPORTED;
     }
+
+    //
+    // Prefer an image preloaded into guest RAM over one embedded in the firmware volume.
+    // FvMain is decompressed in its entirety during PrePi, so anything past a few tens of
+    // megabytes dies there with Out of Resources - a WinPE image cannot travel that way.
+    // The window is carved out of the memory map in MemoryInitPeiLib, so the image can be
+    // handed to the RAMDisk protocol in place, with no copy.
+    //
+    if(PcdGet64(PcdPreloadedRamdiskBase) != 0) {
+        PRELOADED_RAMDISK_HEADER *Header = (VOID *)(UINTN)PcdGet64(PcdPreloadedRamdiskBase);
+
+        if(CompareMem(Header->Magic, PRELOADED_RAMDISK_MAGIC, sizeof(Header->Magic)) == 0) {
+            UINT64 PayloadBase = PcdGet64(PcdPreloadedRamdiskBase) + PRELOADED_RAMDISK_PAYLOAD_OFFSET;
+
+            if((Header->Size == 0) ||
+               (Header->Size > PcdGet32(PcdPreloadedRamdiskMaxSize) - PRELOADED_RAMDISK_PAYLOAD_OFFSET)) {
+                DEBUG((DEBUG_ERROR, "BootRamdiskHelperDxe: preloaded RAMDisk size 0x%llx is out of range\n", Header->Size));
+                return EFI_VOLUME_CORRUPTED;
+            }
+
+            DEBUG((DEBUG_ERROR, "BootRamdiskHelperDxe: preloaded RAMDisk at 0x%llx, 0x%llx bytes\n",
+                   PayloadBase, Header->Size));
+
+            Status = gBS->LocateProtocol(&gEfiRamDiskProtocolGuid, NULL, (VOID **)&RamdiskProtocol);
+            if (EFI_ERROR (Status)) {
+                DEBUG ((DEBUG_ERROR, "BootRamdiskHelperDxe: Couldn't find the RAMDisk protocol - %r\n", Status));
+                return Status;
+            }
+
+            Status = RamdiskProtocol->Register(PayloadBase, Header->Size, RamDiskRegisterType, NULL, &DevicePath);
+            if (EFI_ERROR (Status)) {
+                DEBUG ((DEBUG_ERROR, "BootRamdiskHelperDxe: Cannot register preloaded RAM Disk - %r\n", Status));
+            }
+
+            return Status;
+        }
+
+        DEBUG((DEBUG_ERROR, "BootRamdiskHelperDxe: no preloaded RAMDisk at 0x%llx, falling back to the FV\n",
+               PcdGet64(PcdPreloadedRamdiskBase)));
+    }
     Status = GetSectionFromAnyFv(&gAppleSiliconPkgEmbeddedRamdiskGuid, EFI_SECTION_RAW, 0, &OriginalRamDiskPtr, &RamDiskSize);
     if(EFI_ERROR(Status)) {
         DEBUG((DEBUG_ERROR, "BootRamdiskHelperDxe - no FV embedded ramdisk, exiting\n"));

@@ -83,6 +83,19 @@
 #define USB3_ENABLE_BEAT_BURST_MASK            0xFF
 #define USB3_SET_BEAT_BURST_LIMIT              0xF00
 
+//
+// Apple Silicon vendor-specific CIO settings. These live immediately after the
+// standard DWC3 register window and must be programmed after core reset but
+// before xHCI starts processing transfers.
+//
+#define APPLE_DWC3_CIO_LFPS_OFFSET             0xCD38
+#define APPLE_DWC3_CIO_LFPS_OFFSET_VALUE       0x0F800F80
+#define APPLE_DWC3_CIO_BW_NGT_OFFSET           0xCD3C
+#define APPLE_DWC3_CIO_BW_NGT_OFFSET_VALUE     0x0FC00FC0
+#define APPLE_DWC3_CIO_LINK_TIMER              0xCD40
+#define APPLE_DWC3_CIO_LINK_TIMER_MASK         0x00FFFFFF
+#define APPLE_DWC3_CIO_LINK_TIMER_VALUE        0x00140A10
+
 
 //
 // DWC3 Offsets. Currently we're using the struct approach that U-Boot uses because
@@ -174,4 +187,3 @@ typedef struct {
   UINT32 BcEvt;
   UINT32 BcEvten;
 } DWC3_CONTROLLER;
-

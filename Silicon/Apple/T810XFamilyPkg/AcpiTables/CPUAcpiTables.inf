@@ -17,7 +17,11 @@
   VERSION_STRING                 = 1.0
 
 [Sources]
-  GTDT.aslc
+  # GTDT dropped here: AppleSiliconPkg/AcpiTables ships a newer, SoC-agnostic GTDT and the
+  # platform packages both files, so with the section-index bug in AcpiPlatform.c fixed the
+  # table was installed twice. Both take their GSIVs from the same PCDs; the only fields
+  # that differ are the secure-PL1 and non-secure-PL2 GSIVs, which no OS we care about uses.
+  # GTDT.aslc
   MADT_Static.aslc
   PPTT.aslc
 

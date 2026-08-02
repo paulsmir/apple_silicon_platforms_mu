@@ -15,10 +15,25 @@ GCC_ASM_IMPORT(UARTRelocationDebugMessage)
 
 ASM_FUNC(_ModuleEntryPoint)
 
+  // EXPERIMENT: InitializeUART below is C code and is called before any stack is
+  // set up (that only happens in _ModuleEntrySetupStack). On real hardware SP is
+  // left over non-zero from the previous loader, but m1n1's hv_start enters the
+  // guest with SP_EL1 = 0, so the first function prologue faults, VBAR is still 0
+  // and the CPU vectors to 0x200 -> IABORT. Use the 32 KB FD header window as a
+  // scratch stack, the same trick DiscoverDramFromDt uses for RelocatePeCoffImage.
+  // x1 = image base, set by the trampoline (adr x1, .) at offset 0 of the FD.
+  add x9, x1, #0x8000
+  mov sp, x9
+
   //back up initial start addr and ADT pointer
   mov x27, x0
   mov x26, x1
-  mov x25, x4 //boot args addr
+  // EXPERIMENT: upstream expects the boot args pointer in x4, but m1n1's hypervisor
+  // (hv_start -> guest x0) passes it in x0. Confirmed numerically: at entry x0 was
+  // guest_base + bootargs_off, while x4 held the image base. With x4, EarlySetup
+  // parses the FD image as boot args, PcdSystemMemoryBase/Size stay unset, the stack
+  // base computes to 0 and the first bl faults (SP_EL1 = 0, jump to VBAR+0x200).
+  mov x25, x0 //boot args addr
   //Use ADT to discover usable DRAM base/size
   bl ASM_PFX(InitializeUART)
   //restore values

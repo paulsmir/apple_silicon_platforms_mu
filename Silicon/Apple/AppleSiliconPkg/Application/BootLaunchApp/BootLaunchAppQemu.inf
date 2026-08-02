@@ -1,0 +1,44 @@
+## @file
+#  QEMU-flavoured twin of BootLaunchApp: identical source, but its DebugLib writes through
+#  gST->ConOut instead of straight to the Apple UART, whose MMIO address does not exist on
+#  any other machine. Used to run the same image and the same trace against stock EDK2, to
+#  tell a firmware problem apart from an image problem.
+#
+#  Starts an EFI image with empty LoadOptions, the way BDS would rather than the way the
+#  Shell does. Built standalone and copied onto the RAMDisk; deliberately not packaged
+#  into the firmware volume.
+#
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = BootLaunchAppQemu
+  FILE_GUID                      = 2a3b4c5d-6e7f-4081-9293-a4b5c6d7e8f9
+  MODULE_TYPE                    = UEFI_APPLICATION
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = BootLaunchAppEntry
+
+[Sources]
+  BootLaunchApp.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+  ShellPkg/ShellPkg.dec
+
+[LibraryClasses]
+  UefiApplicationEntryPoint
+  UefiBootServicesTableLib
+  UefiLib
+  DebugLib
+  DevicePathLib
+  MemoryAllocationLib
+  BaseMemoryLib
+  PrintLib
+
+[Protocols]
+  gEfiLoadedImageProtocolGuid       ## CONSUMES
+  gEfiShellParametersProtocolGuid   ## CONSUMES
+  gEfiSimpleFileSystemProtocolGuid  ## CONSUMES
+  gEfiDevicePathProtocolGuid        ## CONSUMES

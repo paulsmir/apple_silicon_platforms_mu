@@ -68,6 +68,16 @@ STATIC VOID Dwc3SetMode(IN DWC3_CONTROLLER *Controller, IN UINT32 Mode) {
   MmioAndThenOr32 ((UINTN)&Controller->GCtl, ~(DWC3_GCTL_PRTCAPDIR (DWC3_GCTL_PRTCAP_OTG)), DWC3_GCTL_PRTCAPDIR (Mode));
 }
 
+STATIC VOID Dwc3AppleSetupCio(IN UINTN Dwc3ControllerBaseReg) {
+  MmioWrite32(Dwc3ControllerBaseReg + APPLE_DWC3_CIO_LFPS_OFFSET,
+              APPLE_DWC3_CIO_LFPS_OFFSET_VALUE);
+  MmioWrite32(Dwc3ControllerBaseReg + APPLE_DWC3_CIO_BW_NGT_OFFSET,
+              APPLE_DWC3_CIO_BW_NGT_OFFSET_VALUE);
+  MmioAndThenOr32(Dwc3ControllerBaseReg + APPLE_DWC3_CIO_LINK_TIMER,
+                  ~APPLE_DWC3_CIO_LINK_TIMER_MASK,
+                  APPLE_DWC3_CIO_LINK_TIMER_VALUE);
+}
+
 
 STATIC VOID Dwc3ControllerSoftReset(IN DWC3_CONTROLLER *Controller) {
   //
@@ -172,6 +182,8 @@ AppleUsbTypeCBringupDxeInitializeUsbController(IN UINTN Dwc3ControllerBaseReg)
     return (VOID *)EFI_DEVICE_ERROR;
   }
 
+  Dwc3AppleSetupCio(Dwc3ControllerBaseReg);
+
   //
   // the core is initialized at this point, U-Boot sets USB2 PHY config based on quirks in the device tree.
   // Since Apple platforms have none of those quirks defined in known device trees, just read and write back the PHY config to be safe.
@@ -222,7 +234,18 @@ AppleUsbTypeCBringupDxeBringupCallback(IN EFI_EVENT Event, IN VOID *Context)
 
     AsciiSPrint(Dwc3RegNodeName, ARRAY_SIZE(Dwc3RegNodeName), "usb-drd%d", Dwc3Index);
     dt_node_t *Dwc3Node = dt_get(Dwc3RegNodeName);
- 
+
+    //
+    // Same caveat as in AppleDartIoMmuDxe: the node can be absent (m1n1's hypervisor
+    // removes the nodes of the Type-C port carrying its proxy link). Proceeding would
+    // leave Dwc3ControllerBaseAddr uninitialized and hand a garbage MMIO base to the
+    // controller bringup.
+    //
+    if(Dwc3Node == NULL) {
+      DEBUG((DEBUG_ERROR, "AppleUsbTypeCBringupDxeBringupCallback: no ADT node %a, skipping\n", Dwc3RegNodeName));
+      continue;
+    }
+
     dt_node_reg(Dwc3Node, 0, &Dwc3ControllerBaseAddr, NULL);
 
     Dwc3ControllerRegSize = 0x100000;//TODO: get from ADT
@@ -268,4 +291,3 @@ AppleUsbTypeCBringupDxeInitialize(
 
     return Status;
 }
-

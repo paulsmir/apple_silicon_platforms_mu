@@ -13,6 +13,7 @@
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
 #include <Library/AppleDTLib.h>
+#include <Library/VirtualDisplayValidation.h>
 
 #include <Protocol/GraphicsOutput.h>
 
@@ -106,11 +107,25 @@ DisplayQueryMode(
     OUT UINTN *SizeOfInfo, OUT EFI_GRAPHICS_OUTPUT_MODE_INFORMATION **Info)
 {
   EFI_STATUS Status;
+  Status = VirtualDisplayValidateQuery (
+             This,
+             ModeNumber,
+             SizeOfInfo,
+             (VOID **)Info
+             );
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
+
+  *Info = NULL;
   Status = gBS->AllocatePool(
       EfiBootServicesData, sizeof(EFI_GRAPHICS_OUTPUT_MODE_INFORMATION),
       (VOID **)Info);
 
   ASSERT_EFI_ERROR(Status);
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
 
   *SizeOfInfo                   = sizeof(EFI_GRAPHICS_OUTPUT_MODE_INFORMATION);
   (*Info)->Version              = This->Mode->Info->Version;
@@ -127,7 +142,7 @@ EFI_STATUS
 EFIAPI
 DisplaySetMode(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *This, IN UINT32 ModeNumber)
 {
-  return EFI_SUCCESS;
+  return VirtualDisplayValidateSetMode (This, ModeNumber);
 }
 
 STATIC
@@ -174,18 +189,40 @@ SimpleFbDxeInitialize(
   
   
   struct boot_args *BootArgs = (struct boot_args *)FixedPcdGet64(PcdBootArgsPointer);
-  UINT64 FramebufferAddr   = BootArgs->video.base;
-  UINT32 FramebufferWidth  = BootArgs->video.width;
-  UINT32 FramebufferHeight = BootArgs->video.height;
+  if (BootArgs == NULL) {
+    DEBUG ((EFI_D_ERROR, "SimpleFbDxe: boot args pointer is NULL\n"));
+    return EFI_INVALID_PARAMETER;
+  }
 
-  DEBUG((EFI_D_INFO, "SimpleFbDxe: Framebuffer parameters, Base: 0x%llx, Width, %d, Height %d\n", FramebufferAddr, FramebufferWidth, FramebufferHeight));
+  UINT64 FramebufferAddr   = BootArgs->video.base;
+  UINT64 FramebufferWidth64  = BootArgs->video.width;
+  UINT64 FramebufferHeight64 = BootArgs->video.height;
+  UINT64 FramebufferStride64 = BootArgs->video.stride;
+  UINT64 FramebufferDepth64  = BootArgs->video.depth;
 
   /* Sanity check */
-  if (FramebufferAddr == 0 || FramebufferWidth == 0 ||
-      FramebufferHeight == 0) {
+  if ((FramebufferAddr == 0) || (FramebufferWidth64 > MAX_UINT32) ||
+      (FramebufferHeight64 > MAX_UINT32) || (FramebufferStride64 > MAX_UINT32) ||
+      (FramebufferDepth64 > MAX_UINT32) ||
+      !VirtualDisplayValidateGeometry (
+         (UINT32)FramebufferWidth64,
+         (UINT32)FramebufferHeight64,
+         (UINT32)FramebufferStride64,
+         (UINT32)FramebufferDepth64
+         )) {
     DEBUG((EFI_D_ERROR, "SimpleFbDxe: Invalid framebuffer parameters\n"));
-    return EFI_DEVICE_ERROR;
+    return EFI_INVALID_PARAMETER;
   }
+
+  UINT32 FramebufferWidth  = (UINT32)FramebufferWidth64;
+  UINT32 FramebufferHeight = (UINT32)FramebufferHeight64;
+  UINT32 FramebufferStride = (UINT32)FramebufferStride64;
+  UINTN  FrameBufferSize   = (UINTN)FramebufferStride * FramebufferHeight;
+
+  DEBUG ((EFI_D_INFO,
+    "SimpleFbDxe: GOP framebuffer 0x%llx, %ux%u, stride %u, size 0x%lx, B8G8R8X8\n",
+    FramebufferAddr, FramebufferWidth, FramebufferHeight, FramebufferStride,
+    FrameBufferSize));
 
   /* Prepare struct */
   if (mDisplay.Mode == NULL) {
@@ -221,11 +258,9 @@ SimpleFbDxeInitialize(
   mDisplay.Mode->Info->VerticalResolution   = FramebufferHeight;
 
   /* SimpleFB runs on a8r8g8b8 (VIDEO_BPP32) for WoA devices */
-  UINT32               LineLength = FramebufferWidth * VNBYTES(VIDEO_BPP32);
-  UINT32               FrameBufferSize    = LineLength * FramebufferHeight;
   EFI_PHYSICAL_ADDRESS FrameBufferAddress = FramebufferAddr;
 
-  mDisplay.Mode->Info->PixelsPerScanLine = FramebufferWidth;
+  mDisplay.Mode->Info->PixelsPerScanLine = FramebufferStride / FB_BYTES_PER_PIXEL;
   mDisplay.Mode->Info->PixelFormat = PixelBlueGreenRedReserved8BitPerColor;
   mDisplay.Mode->SizeOfInfo      = sizeof(EFI_GRAPHICS_OUTPUT_MODE_INFORMATION);
   mDisplay.Mode->FrameBufferBase = FrameBufferAddress;

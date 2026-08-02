@@ -399,6 +399,17 @@ AppleDartIoMmuDxeInitialize(
             DEBUG((DEBUG_INFO, "Skipping DFU port DART %d\n", DartIndex));
             continue;
         }
+        //
+        // The node lookup above may legitimately fail: m1n1's hypervisor deletes the ADT
+        // nodes of whichever Type-C port it uses for its own proxy link. Without this check
+        // DartReg[] is read uninitialized and dt_node_prop() is called on a NULL node,
+        // whose NULL result then goes straight into AsciiStrCmp() below - a hard hang.
+        //
+        if(DartNode[DartIndex / 2] == NULL) {
+            DEBUG((DEBUG_INFO, "DART %d has no ADT node, skipping\n", DartIndex));
+            continue;
+        }
+
         //DEBUG((DEBUG_INFO, "Test0\n"));
         DartInfo[DartIndex].BaseAddress = DartReg[DartIndex];
 

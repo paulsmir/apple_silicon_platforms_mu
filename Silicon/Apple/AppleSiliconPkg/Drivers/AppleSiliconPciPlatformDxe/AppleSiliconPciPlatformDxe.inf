@@ -43,6 +43,7 @@
   MemoryAllocationLib
   UefiDriverEntryPoint
   DxeServicesLib
+  DxeServicesTableLib
   IoLib
   PcdLib
   UefiLib

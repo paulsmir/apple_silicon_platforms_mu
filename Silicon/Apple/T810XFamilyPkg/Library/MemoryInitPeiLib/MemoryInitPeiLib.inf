@@ -43,6 +43,11 @@
   gEmbeddedTokenSpaceGuid.PcdPrePiProduceMemoryTypeInformationHob
 
 [FixedPcd]
+  gAppleSiliconPkgTokenSpaceGuid.PcdPreloadedRamdiskBase
+  gAppleSiliconPkgTokenSpaceGuid.PcdPreloadedRamdiskMaxSize
+  gAppleSiliconPkgTokenSpaceGuid.PcdLowMemoryWindowBase
+  gAppleSiliconPkgTokenSpaceGuid.PcdLowMemoryWindowSize
+  gAppleSiliconPkgTokenSpaceGuid.PcdLowMemoryWindowBackingBase
   gArmTokenSpaceGuid.PcdFdSize
 
   gAppleSiliconPkgTokenSpaceGuid.PcdSystemMemoryUefiRegionSize

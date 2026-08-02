@@ -414,10 +414,29 @@ MsBootOptionsLibRegisterDefaultBootOptions (
   VOID
   )
 {
-  RegisterFvBootOption (&gMsBootPolicyFileGuid, MS_USB_BOOT, (UINTN)-1, LOAD_OPTION_ACTIVE, (UINT8 *)MS_USB_BOOT_PARM, sizeof (MS_USB_BOOT_PARM));
-  RegisterFvBootOption (&gMsBootPolicyFileGuid, MS_SDD_BOOT, (UINTN)-1, LOAD_OPTION_ACTIVE, (UINT8 *)MS_SDD_BOOT_PARM, sizeof (MS_SDD_BOOT_PARM));
-  //RegisterFvBootOption (PcdGetPtr (PcdShellFile), INTERNAL_UEFI_SHELL_NAME, (UINTN)-1, LOAD_OPTION_ACTIVE, NULL, 0);
-  RegisterFvBootOption (&gMsBootPolicyFileGuid, MS_PXE_BOOT, (UINTN)-1, LOAD_OPTION_ACTIVE, (UINT8 *)MS_PXE_BOOT_PARM, sizeof (MS_PXE_BOOT_PARM));
+  //
+  // BRING-UP: the USB, internal-storage and PXE options are dead weight here -- USB never
+  // enumerates (XhciDxe is a PCI driver, the Apple Type-C controller is dwc3 on plain
+  // MMIO), there is no internal storage driver, and there is no network.
+  //
+  // They are not merely useless, they are harmful: BDS signals ReadyToBoot before *each*
+  // attempt, and the ReadyToBoot hook that repoints ConOut at the serial console then runs
+  // before MsBootPolicy, which hangs at "Unable to set console mode - Unsupported" /
+  // "USB boot desired, but no USB devices found on first attempt" and never reaches the
+  // Shell. With only the Shell registered, ReadyToBoot fires once, right before it.
+  //
+  // RegisterFvBootOption (&gMsBootPolicyFileGuid, MS_USB_BOOT, (UINTN)-1, LOAD_OPTION_ACTIVE, (UINT8 *)MS_USB_BOOT_PARM, sizeof (MS_USB_BOOT_PARM));
+  // RegisterFvBootOption (&gMsBootPolicyFileGuid, MS_SDD_BOOT, (UINTN)-1, LOAD_OPTION_ACTIVE, (UINT8 *)MS_SDD_BOOT_PARM, sizeof (MS_SDD_BOOT_PARM));
+  //
+  // Re-enabled: the UEFI Shell is already packaged in the firmware volume
+  // (ShellPkg/Application/Shell/Shell.inf is in the .fdf), and all the machinery to
+  // find it by PcdShellFile is present. With this commented out BDS ends up with no
+  // usable boot option at all and calls PSCI SYSTEM_RESET. Booting the shell straight
+  // out of the FV needs no external media, which matters here: USB enumeration does not
+  // work (XhciDxe is a PCI driver, the Apple Type-C controller is dwc3 on plain MMIO).
+  //
+  RegisterFvBootOption (PcdGetPtr (PcdShellFile), INTERNAL_UEFI_SHELL_NAME, (UINTN)-1, LOAD_OPTION_ACTIVE, NULL, 0);
+  // RegisterFvBootOption (&gMsBootPolicyFileGuid, MS_PXE_BOOT, (UINTN)-1, LOAD_OPTION_ACTIVE, (UINT8 *)MS_PXE_BOOT_PARM, sizeof (MS_PXE_BOOT_PARM));
   //RegisterFvBootOption (PcdGetPtr (PcdUIApplicationFile), INTERNAL_UEFI_FP_NAME, (UINTN)-1, LOAD_OPTION_ACTIVE, NULL, 0);
 }
 
@@ -450,8 +469,9 @@ MsBootOptionsLibGetDefaultOptions (
   Status |= CreateFvBootOption (&gMsBootPolicyFileGuid, MS_SDD_BOOT, &Option[1], LOAD_OPTION_ACTIVE, (UINT8 *)MS_SDD_BOOT_PARM, sizeof (MS_SDD_BOOT_PARM));
   Status |= CreateFvBootOption (&gMsBootPolicyFileGuid, MS_PXE_BOOT, &Option[2], LOAD_OPTION_ACTIVE, (UINT8 *)MS_PXE_BOOT_PARM, sizeof (MS_PXE_BOOT_PARM));
 
-  //Status2 = CreateFvBootOption (PcdGetPtr (PcdShellFile), INTERNAL_UEFI_SHELL_NAME, &Option[3], LOAD_OPTION_ACTIVE, NULL, 0);
-  Status2 = EFI_UNSUPPORTED;
+  // Re-enabled alongside MsBootOptionsLibRegisterDefaultBootOptions() above; the array is
+  // already sized for four options, with the shell in slot 3.
+  Status2 = CreateFvBootOption (PcdGetPtr (PcdShellFile), INTERNAL_UEFI_SHELL_NAME, &Option[3], LOAD_OPTION_ACTIVE, NULL, 0);
   if (EFI_ERROR (Status2)) {
     // The shell is optional.  So, ignore that we cannot create it.
     LocalOptionCount--;

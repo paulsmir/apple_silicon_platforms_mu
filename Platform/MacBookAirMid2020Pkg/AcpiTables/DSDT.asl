@@ -114,8 +114,15 @@
                 NonCacheable,         // Cacheable
                 ReadWrite,            // ReadAndWrite
                 0x0000000000000000,   // AddressGranularity - GRA
-                FixedPcdGet64(PcdAppleUartBase),   // AddressMinimum - MIN
-                (FixedPcdGet64(PcdAppleUartBase) + 0xFFF),   // AddressMaximum - MAX
+                //
+                // Literals on purpose. Trim.py does substitute the PCD here, but it emits
+                // 0x235200000ULL - and iasl understands neither the ULL suffix nor the
+                // parenthesised addition that produced the maximum, so the descriptor came
+                // out with Min > Max (ASL error 6051). This file is T8103-specific anyway;
+                // the value is PcdAppleUartBase from T810XFamilyPkg.dsc.inc.
+                //
+                0x0000000235200000,   // AddressMinimum - MIN
+                0x0000000235200FFF,   // AddressMaximum - MAX
                 0x0000000000000000,   // AddressTranslation - TRA
                 0x0000000000001000    // RangeLength - LEN
                 )
@@ -124,6 +131,112 @@
             Method (_STA) {
                 Return (0xF)
             }
+        }
+
+        //
+        // The Type-C port not occupied by the m1n1 proxy. AppleUsbTypeCBringupDxe
+        // leaves this DWC3 instance in xHCI host mode and its DARTs in bypass, so
+        // Windows can bind the inbox USBXHCI driver directly to the standard xHCI
+        // register window. AIC 857 is usb-drd1's level-high interrupt on T8103.
+        //
+        Device(XHC1) {
+            // This DWC3 has no standard xHCI debug capability.  PNP0D10 selects the
+            // DebuggerSafe install path and, with KD active, Windows preserves a
+            // debugger-owned controller instead of creating the normal xHCI rings.
+            // PNP0D15 selects the inbox no-standard-debug path used by the other M1 boards.
+            Name(_HID, EISAID("PNP0D15"))
+            Name(_UID, One)
+            Name(_CCA, One)
+            Name(_CRS, ResourceTemplate() {
+                QWordMemory(
+                    ResourceConsumer, PosDecode, MinFixed, MaxFixed, NonCacheable, ReadWrite,
+                    0x0000000000000000, // Granularity
+                    0x0000000502280000, // Min - usb-drd1 / xHCI
+                    0x000000050237FFFF, // Max
+                    0x0000000000000000, // Translation
+                    0x0000000000100000  // Length (1 MB)
+                )
+                Interrupt(ResourceConsumer, Level, ActiveHigh, Exclusive) { 857 }
+            })
+            Method(_STA) { Return(0xF) }
+        }
+
+        //
+        // Emulated PCIe root bridge (host: m1n1 hv_pci.c). ECAM is described by MCFG; this
+        // node gives the OS the bus range, the MMIO window downstream BARs live in, and INTx
+        // routing. Bare hex literals only (Trim.py/iasl PCD caveat, see COM0 above).
+        //
+        Device(PCI0) {
+            Name(_HID, EISAID("PNP0A08"))   // PCIe host bridge
+            Name(_CID, EISAID("PNP0A03"))   // ...also a legacy PCI host bridge
+            Name(_SEG, Zero)
+            Name(_BBN, Zero)
+            Name(_CCA, One)                 // DMA is cache-coherent (guest RAM is coherent)
+            Name(_UID, Zero)
+
+            Name(_CRS, ResourceTemplate() {
+                WordBusNumber(
+                    ResourceProducer, MinFixed, MaxFixed, PosDecode,
+                    0x0000,             // Granularity
+                    0x0000,             // Min bus
+                    0x0000,             // Max bus (single bus, 1 MB ECAM)
+                    0x0000,             // Translation
+                    0x0001              // Length (1 bus)
+                )
+                // MMIO window downstream BAR0 is assigned from (== PcdPciMmio64Base/Size).
+                QWordMemory(
+                    ResourceProducer, PosDecode, MinFixed, MaxFixed, NonCacheable, ReadWrite,
+                    0x0000000000000000, // Granularity
+                    0x0000000400000000, // Min
+                    0x000000041FFFFFFF, // Max
+                    0x0000000000000000, // Translation
+                    0x0000000020000000  // Length (512 MB)
+                )
+            })
+
+            // INTx routing: device 0 INTA -> GSIV 64. A small vSPI that m1n1 injects DIRECTLY
+            // into the vGIC (write a Group-1 LR + update_vi, same as the timer PPIs) with level
+            // semantics tied to "unread CQ entries" - no AIC software line, so no AIC<->vGIC
+            // namespace mixing. Level/ActiveLow is the INTx default for a GSIV _PRT entry.
+            Name(_PRT, Package() {
+                Package() { 0x0000FFFF, 0, Zero, 64 }   // dev0 INTA -> GSIV 64 (vSPI, direct inject)
+            })
+
+            // _OSC: hard NT requirement for a PNP0A08 root. Without it acpi.sys treats the
+            // bridge as incomplete and never brings the segment up (MCFG present, ECAM never
+            // read). Grant everything the OS asks for (no masking of CDW3).
+            Method(_OSC, 4) {
+                CreateDWordField(Arg3, 0x00, CDW1)   // status
+                CreateDWordField(Arg3, 0x08, CDW3)   // control (left as requested)
+                If (Arg0 == ToUUID("33db4d5b-1ff7-401c-9657-7441c03dd766")) {
+                    // PCI Host Bridge UUID: grant all - CDW3 unchanged
+                } Else {
+                    CDW1 |= 0x04                      // unrecognized UUID
+                }
+                Return (Arg3)
+            }
+
+            Method(_STA) { Return(0xF) }
+        }
+
+        //
+        // PCI Firmware Spec: the ECAM range from MCFG must be claimed as a motherboard
+        // resource (PNP0C02) or pci.sys may ignore MCFG entirely - same silent symptom as a
+        // missing _OSC. Reserve the 1 MB ECAM window at 0x690000000.
+        //
+        Device(RES0) {
+            Name(_HID, EisaId("PNP0C02"))
+            Name(_CRS, ResourceTemplate() {
+                QWordMemory(
+                    ResourceConsumer, PosDecode, MinFixed, MaxFixed, NonCacheable, ReadWrite,
+                    0x0000000000000000, // Granularity
+                    0x0000000690000000, // Min - ECAM base
+                    0x00000006900FFFFF, // Max - ECAM base + 1 MB - 1
+                    0x0000000000000000, // Translation
+                    0x0000000000100000  // Length (1 MB)
+                )
+            })
+            Method(_STA) { Return(0xF) }
         }
 
         //

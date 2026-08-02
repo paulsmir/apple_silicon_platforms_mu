@@ -29,6 +29,7 @@
   DevicePathLib
   DxeServicesLib
   DebugLib
+  BaseMemoryLib
   HiiLib
   PrintLib
   UefiHiiServicesLib
@@ -47,6 +48,8 @@
 
 [Pcd.common]
   gAppleSiliconPkgTokenSpaceGuid.PcdInitializeRamdisk
+  gAppleSiliconPkgTokenSpaceGuid.PcdPreloadedRamdiskBase
+  gAppleSiliconPkgTokenSpaceGuid.PcdPreloadedRamdiskMaxSize
 
 
 [Depex]

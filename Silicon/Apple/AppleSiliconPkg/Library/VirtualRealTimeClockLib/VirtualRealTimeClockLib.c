@@ -88,7 +88,15 @@ LibGetTime(OUT EFI_TIME *Time, OUT EFI_TIME_CAPABILITIES *Capabilities)
   Time->Month = BaseTime.Month;
 
   const UINT64 SECONDS_PER_DAY = 24 * 60 * 60;
-  Time->Day                    = (ElapsedSeconds / SECONDS_PER_DAY);
+  UINT64       ElapsedDays     = ElapsedSeconds / SECONDS_PER_DAY;
+
+  //
+  // Day is a day of the month: 1..31, never 0. Reporting the raw elapsed-day count made
+  // GetTime return 2019-01-00 for the whole first day of uptime - an EFI_TIME that no
+  // caller is required to accept, returned alongside EFI_SUCCESS. Clamped to 28 so the
+  // date stays valid in every month once the machine has been up for a while.
+  //
+  Time->Day = (UINT8)(1 + (ElapsedDays % 28));
   ElapsedSeconds %= SECONDS_PER_DAY;
 
   const UINT64 SECONDS_PER_HOUR = 60 * 60;

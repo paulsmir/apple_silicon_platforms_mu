@@ -23,6 +23,93 @@
 
 #include <Library/BaseLib.h>
 #include <Library/UefiBootServicesTableLib.h>
+#include <Library/DxeServicesTableLib.h>
+#include <Library/UefiLib.h>
+#include <Library/BaseMemoryLib.h>
+#include <Library/DebugLib.h>
+#include <IndustryStandard/Acpi.h>
+#include <Guid/Acpi.h>
+
+//
+// Dump the LIVE ACPI chain (RSDP -> XSDT -> table list) at ReadyToBoot, i.e. exactly what the
+// OS will find. This is the measurement that replaces a proxy RAM scan (which resets this
+// machine) and kd: it says directly whether MCFG reached the XSDT the guest sees, and prints
+// the RSDP address so kd_acpi.py can cross-check from inside Windows.
+//
+STATIC
+VOID
+AcpiDumpConfigTable (
+  VOID
+  )
+{
+  UINTN                        Index;
+  VOID                         *Rsdp = NULL;
+  EFI_ACPI_DESCRIPTION_HEADER  *Xsdt;
+  UINT64                       XsdtAddr;
+  UINT64                       *Entries;
+  UINTN                        Count;
+
+  //
+  // Print every configuration-table entry (GUID first dword + VendorTable pointer). This alone
+  // yields the RSDP address for kd_acpi.py and cannot fault - no table contents are touched.
+  //
+  DEBUG ((DEBUG_ERROR, "ACPI LIVE: %u configuration tables\n",
+          (UINT32)gST->NumberOfTableEntries));
+  for (Index = 0; Index < gST->NumberOfTableEntries; Index++) {
+    DEBUG ((DEBUG_ERROR, "ACPI LIVE: cfg[%u] guid0=0x%08x table=0x%lx\n", (UINT32)Index,
+            *(UINT32 *)&gST->ConfigurationTable[Index].VendorGuid,
+            (UINT64)(UINTN)gST->ConfigurationTable[Index].VendorTable));
+    if (CompareGuid (&gST->ConfigurationTable[Index].VendorGuid, &gEfiAcpiTableGuid)) {
+      Rsdp = gST->ConfigurationTable[Index].VendorTable;
+    }
+  }
+
+  DEBUG ((DEBUG_ERROR, "ACPI LIVE: RSDP @ 0x%lx\n", (UINT64)(UINTN)Rsdp));
+  if (Rsdp == NULL) {
+    DEBUG ((DEBUG_ERROR, "ACPI LIVE: no ACPI 2.0 table in the configuration table!\n"));
+    return;
+  }
+
+  //
+  // Validate before dereferencing: an earlier version walked the XSDT unconditionally and took
+  // a synchronous exception in ArmCpuDxe, killing the boot. Print the RSDP address (enough for
+  // kd_acpi.py to cross-check from inside Windows) and only walk when the data looks sane.
+  //
+  if (CompareMem (Rsdp, "RSD PTR ", 8) != 0) {
+    DEBUG ((DEBUG_ERROR, "ACPI LIVE: RSDP signature mismatch, not walking\n"));
+    return;
+  }
+
+  XsdtAddr = *(UINT64 *)((UINT8 *)Rsdp + 24);
+  DEBUG ((DEBUG_ERROR, "ACPI LIVE: XSDT @ 0x%lx\n", XsdtAddr));
+  if (XsdtAddr == 0) {
+    return;
+  }
+
+  Xsdt = (EFI_ACPI_DESCRIPTION_HEADER *)(UINTN)XsdtAddr;
+  if (Xsdt->Signature != SIGNATURE_32 ('X', 'S', 'D', 'T') ||
+      Xsdt->Length < sizeof (EFI_ACPI_DESCRIPTION_HEADER) || Xsdt->Length > 0x1000) {
+    DEBUG ((DEBUG_ERROR, "ACPI LIVE: XSDT header implausible (sig=0x%x len=0x%x)\n",
+            Xsdt->Signature, Xsdt->Length));
+    return;
+  }
+
+  Count   = (Xsdt->Length - sizeof (EFI_ACPI_DESCRIPTION_HEADER)) / sizeof (UINT64);
+  Entries = (UINT64 *)((UINT8 *)Xsdt + sizeof (EFI_ACPI_DESCRIPTION_HEADER));
+
+  for (Index = 0; Index < Count && Index < 32; Index++) {
+    UINT64  TblAddr = Entries[Index];
+    UINT32  Sig;
+
+    if (TblAddr == 0) {
+      continue;
+    }
+    Sig = ((EFI_ACPI_DESCRIPTION_HEADER *)(UINTN)TblAddr)->Signature;
+    DEBUG ((DEBUG_ERROR, "ACPI LIVE: XSDT[%u] %c%c%c%c @0x%lx\n",
+            (UINT32)Index, (CHAR8)Sig, (CHAR8)(Sig >> 8), (CHAR8)(Sig >> 16),
+            (CHAR8)(Sig >> 24), TblAddr));
+  }
+}
 #include <Library/DebugLib.h>
 #include <Library/PcdLib.h>
 
@@ -492,6 +579,30 @@ AcpiPlatformEntryPoint (
   DEBUG((DEBUG_ERROR, "%a: AcpiPlatform driver started\n", __FUNCTION__));
 
   //
+  // Register the emulated-NVMe ECAM (0x690000000, 1 MB) as MMIO in the GCD so it lands in the
+  // UEFI memory map and Windows can map the segment-0 config space. Nothing else adds it:
+  // PciHostBridgeDxe only adds the BAR MMIO apertures, and AppleSiliconPciPlatformDxe (which
+  // reads the ADT apcie ECAM) is not in the FDF. The %r is also a probe - "Access Denied" =>
+  // the region was already present (hypothesis wrong), "Success" => it was missing.
+  //
+  {
+    EFI_STATUS  GcdStatus = gDS->AddMemorySpace (
+                                   EfiGcdMemoryTypeMemoryMappedIo,
+                                   0x690000000, 0x100000, EFI_MEMORY_UC);
+    DEBUG ((DEBUG_ERROR, "ECAM GCD AddMemorySpace(0x690000000,0x100000) = %r\n", GcdStatus));
+    if (!EFI_ERROR (GcdStatus)) {
+      gDS->SetMemorySpaceAttributes (0x690000000, 0x100000, EFI_MEMORY_UC);
+    }
+  }
+
+  //
+  // NOTE: an earlier version ran this dump from a ReadyToBoot event; the callback faulted
+  // immediately (synchronous exception in ArmCpuDxe, boot dead) before any output flushed.
+  // The dump is now called synchronously at the end of this entry point instead - see the
+  // call after the tables are installed.
+  //
+
+  //
   // Find the AcpiTable protocol
   //
   DEBUG((DEBUG_ERROR, "%a: Locating ACPI table protocol\n", __FUNCTION__));
@@ -534,6 +645,18 @@ AcpiPlatformEntryPoint (
 
       TableSize = ((EFI_ACPI_DESCRIPTION_HEADER *)CurrentTable)->Length;
       ASSERT (Size >= TableSize);
+
+      //
+      // DEBUG: log every table actually installed into the XSDT, so the firmware log shows
+      // directly whether MCFG travels (vs. only living in the source). Answers "did the table
+      // reach the live XSDT" deterministically, without kd or a RAM scan.
+      //
+      {
+        UINT32  DbgSig = ((EFI_ACPI_DESCRIPTION_HEADER *)CurrentTable)->Signature;
+        DEBUG ((DEBUG_ERROR, "ACPI INSTALL instance=%u sig=%c%c%c%c len=0x%x\n",
+                Instance, (CHAR8)DbgSig, (CHAR8)(DbgSig >> 8),
+                (CHAR8)(DbgSig >> 16), (CHAR8)(DbgSig >> 24), TableSize));
+      }
 
       //
       // Checksum ACPI table
@@ -604,6 +727,18 @@ AcpiPlatformEntryPoint (
       ASSERT (Size >= TableSize);
 
       //
+      // DEBUG: log every table actually installed into the XSDT, so the firmware log shows
+      // directly whether MCFG travels (vs. only living in the source). Answers "did the table
+      // reach the live XSDT" deterministically, without kd or a RAM scan.
+      //
+      {
+        UINT32  DbgSig = ((EFI_ACPI_DESCRIPTION_HEADER *)CurrentTable)->Signature;
+        DEBUG ((DEBUG_ERROR, "ACPI INSTALL instance=%u sig=%c%c%c%c len=0x%x\n",
+                Instance, (CHAR8)DbgSig, (CHAR8)(DbgSig >> 8),
+                (CHAR8)(DbgSig >> 16), (CHAR8)(DbgSig >> 24), TableSize));
+      }
+
+      //
       // Checksum ACPI table
       //
       AcpiPlatformChecksum ((UINT8 *)CurrentTable, TableSize);
@@ -639,6 +774,16 @@ AcpiPlatformEntryPoint (
   //
   // Locate the firmware volume protocol
   //
+  //
+  // Section indices are per-file, so every block must start counting at zero. The device
+  // and SoC blocks reset it; these last two did not, and inherited the previous block's
+  // final count - silently skipping that many of their own sections. On this platform the
+  // family file holds exactly one table, the FADT, which was therefore never installed.
+  //
+  Instance     = 0;
+  CurrentTable = NULL;
+  TableHandle  = 0;
+
   DEBUG((DEBUG_ERROR, "%a: Locating generic ACPI tables\n", __FUNCTION__));
   Status = LocateFvInstanceWithGenericTables (&FwVol2);
   if (EFI_ERROR (Status)) {
@@ -670,6 +815,18 @@ AcpiPlatformEntryPoint (
       ASSERT (Size >= TableSize);
 
       //
+      // DEBUG: log every table actually installed into the XSDT, so the firmware log shows
+      // directly whether MCFG travels (vs. only living in the source). Answers "did the table
+      // reach the live XSDT" deterministically, without kd or a RAM scan.
+      //
+      {
+        UINT32  DbgSig = ((EFI_ACPI_DESCRIPTION_HEADER *)CurrentTable)->Signature;
+        DEBUG ((DEBUG_ERROR, "ACPI INSTALL instance=%u sig=%c%c%c%c len=0x%x\n",
+                Instance, (CHAR8)DbgSig, (CHAR8)(DbgSig >> 8),
+                (CHAR8)(DbgSig >> 16), (CHAR8)(DbgSig >> 24), TableSize));
+      }
+
+      //
       // Checksum ACPI table
       //
       AcpiPlatformChecksum ((UINT8 *)CurrentTable, TableSize);
@@ -704,6 +861,10 @@ AcpiPlatformEntryPoint (
   //
   // Locate the firmware volume protocol
   //
+  Instance     = 0;
+  CurrentTable = NULL;
+  TableHandle  = 0;
+
   DEBUG((DEBUG_ERROR, "%a: Locating device family ACPI tables\n", __FUNCTION__));
   Status = LocateFvInstanceWithDeviceFamilyTables (&FwVol2);
   if (EFI_ERROR (Status)) {
@@ -733,6 +894,18 @@ AcpiPlatformEntryPoint (
 
       TableSize = ((EFI_ACPI_DESCRIPTION_HEADER *)CurrentTable)->Length;
       ASSERT (Size >= TableSize);
+
+      //
+      // DEBUG: log every table actually installed into the XSDT, so the firmware log shows
+      // directly whether MCFG travels (vs. only living in the source). Answers "did the table
+      // reach the live XSDT" deterministically, without kd or a RAM scan.
+      //
+      {
+        UINT32  DbgSig = ((EFI_ACPI_DESCRIPTION_HEADER *)CurrentTable)->Signature;
+        DEBUG ((DEBUG_ERROR, "ACPI INSTALL instance=%u sig=%c%c%c%c len=0x%x\n",
+                Instance, (CHAR8)DbgSig, (CHAR8)(DbgSig >> 8),
+                (CHAR8)(DbgSig >> 16), (CHAR8)(DbgSig >> 24), TableSize));
+      }
 
       //
       // Checksum ACPI table
@@ -776,6 +949,12 @@ AcpiPlatformEntryPoint (
 
   // Status = AcpiPlatformInstallMadtTable();
 
+
+  //
+  // All tables are installed by now: dump the live ACPI chain (measurement - does MCFG reach
+  // the XSDT the OS will read?). Synchronous, so a fault here is attributable and not silent.
+  //
+  AcpiDumpConfigTable ();
 
   //
   // The driver does not require to be kept loaded.

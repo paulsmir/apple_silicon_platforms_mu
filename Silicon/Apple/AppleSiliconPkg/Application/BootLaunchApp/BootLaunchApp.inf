@@ -1,0 +1,39 @@
+## @file
+#  Starts an EFI image with empty LoadOptions, the way BDS would rather than the way the
+#  Shell does. Built standalone and copied onto the RAMDisk; deliberately not packaged
+#  into the firmware volume.
+#
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = BootLaunchApp
+  FILE_GUID                      = 1f2e3d4c-5b6a-4798-8a9b-0c1d2e3f4a5b
+  MODULE_TYPE                    = UEFI_APPLICATION
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = BootLaunchAppEntry
+
+[Sources]
+  BootLaunchApp.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+  ShellPkg/ShellPkg.dec
+
+[LibraryClasses]
+  UefiApplicationEntryPoint
+  UefiBootServicesTableLib
+  UefiLib
+  DebugLib
+  DevicePathLib
+  MemoryAllocationLib
+  BaseMemoryLib
+  PrintLib
+
+[Protocols]
+  gEfiLoadedImageProtocolGuid       ## CONSUMES
+  gEfiShellParametersProtocolGuid   ## CONSUMES
+  gEfiSimpleFileSystemProtocolGuid  ## CONSUMES
+  gEfiDevicePathProtocolGuid        ## CONSUMES

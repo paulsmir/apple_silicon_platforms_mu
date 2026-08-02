@@ -34,7 +34,13 @@
   PcdLib
   DebugLib
   UefiBootServicesTableLib
+  DxeServicesTableLib
+  BaseMemoryLib
   UefiDriverEntryPoint
+
+[Guids]
+  gEfiAcpiTableGuid                             ## CONSUMES ## SystemTable
+  gEfiEventReadyToBootGuid                      ## CONSUMES ## Event
 
 [Protocols]
   gEfiAcpiTableProtocolGuid                     ## CONSUMES

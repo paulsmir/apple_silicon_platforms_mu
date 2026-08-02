@@ -87,8 +87,9 @@ STATIC DBG2_TABLE Dbg2 = {
     // Kernel Debug Port
     DBG2_DEBUG_PORT_DDI (
       DBG2_NUMBER_OF_GENERIC_ADDRESS_REGISTERS,
-      0xA, /* SAM5250, seems to be more or less compatible with the 8900 UART (which isn't 5250 based but is close enough for WinDbg) */
-      FixedPcdGet64 (PcdAppleUartBase),
+      0x3, /* ARM PL011 - Windows kdcom speaks PL011, not the Apple S5L UART. m1n1's
+              hv_pl011 emulates a PL011 at the base below and forwards it to the host. */
+      (FixedPcdGet64 (PcdAppleUartBase) + 0x1000), /* 0x235201000 - second page of the UART block, served by hv_vuart */
       SERIAL_PORT_8900_UART_ADDR_SIZE,
       APPLE_8900_UART_STRING
       ),

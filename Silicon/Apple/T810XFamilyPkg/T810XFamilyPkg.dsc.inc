@@ -16,8 +16,32 @@
   gArmTokenSpaceGuid.PcdArmArchTimerHypIntrNum|20 #this disables the HV timer
   gArmTokenSpaceGuid.PcdArmArchTimerVirtIntrNum|18 #virt timer
   gAppleSiliconPkgTokenSpaceGuid.PcdAppleSartVersion|2
-  gAppleSiliconPkgTokenSpaceGuid.PcdBootArgsPointer|0x840000000
-  gAppleSiliconPkgTokenSpaceGuid.PcdAdtPointer|0x840004000
+  # EXPERIMENT: upstream hardcodes these to 0x840000000/0x840004000. Under the m1n1
+  # hypervisor that address is unusable in both layouts we tried: with a pinned
+  # phys_base of 0x850000000 it is below guest RAM ("HV: Unmapped IPA 0x840000000"),
+  # and with m1n1's natural layout it lands in a carveout, where the access faults
+  # inside m1n1's own EL2 handler and reboots the machine.
+  # 0x854000000 sits inside pinned guest RAM, ~12 MB above the end of the loaded
+  # image region (which ends around 0x8533ec000). Keep in sync with run_uefi.py.
+  gAppleSiliconPkgTokenSpaceGuid.PcdBootArgsPointer|0x854000000
+  # m1n1's hv uploads the ADT to adt_base = phys_base + 16 MB (hv/__init__.py, start()).
+  # With run_uefi.py pinning phys_base to 0x850000000 that is exactly 0x851000000.
+  # The old 0x854004000 pointed 48 MB past it, so dt_get() parsed garbage and every
+  # ADT-driven driver (AppleUsbTypeCBringupDxe in particular) silently found nothing.
+  gAppleSiliconPkgTokenSpaceGuid.PcdAdtPointer|0x851000000
+
+  # Window for a RAMDisk preloaded straight into guest RAM by run_uefi.py. Sits well above
+  # the firmware volume (0x8510B4000 + 0x1E00000) and inside the RAM m1n1 maps for the
+  # guest, and is carved out of the memory map by MemoryInitPeiLib.
+  gAppleSiliconPkgTokenSpaceGuid.PcdPreloadedRamdiskBase|0x860000000
+  gAppleSiliconPkgTokenSpaceGuid.PcdPreloadedRamdiskMaxSize|0x40000000
+
+  # Low DRAM window for the Windows boot manager. Starts at 1 MB rather than 0 so that a
+  # null dereference in the firmware still faults. Backed by RAM above the RAMDisk window;
+  # guest DRAM runs to 0x9DF708000, so 0x8A0100000 + 0x3FF00000 fits with room to spare.
+  gAppleSiliconPkgTokenSpaceGuid.PcdLowMemoryWindowBase|0x100000
+  gAppleSiliconPkgTokenSpaceGuid.PcdLowMemoryWindowSize|0x3FF00000
+  gAppleSiliconPkgTokenSpaceGuid.PcdLowMemoryWindowBackingBase|0x8A0100000
 !if $(USES_MAC_CPU) == TRUE
   gAppleSiliconPkgTokenSpaceGuid.PcdSmbiosCpuIdentifier|"T8103"
   gAppleSiliconPkgTokenSpaceGuid.PcdSmbiosCpuModel|"Apple M1"
@@ -50,6 +74,15 @@
   #
   gArmTokenSpaceGuid.PcdGicDistributorBase|0xf00000000
   gArmTokenSpaceGuid.PcdGicRedistributorsBase|0xf10000000
+  #
+  # EXPERIMENT: the GICv2 CPU interface base was missing, so it defaulted to 0 and
+  # ArmGicV2Dxe faulted writing GICC_BPR at address 0x8 (observed: "str w1, [x0]"
+  # with x0 = 8). It is needed because ArmGicDxe's GicV3Supported() decides from
+  # ArmHasGicSystemRegisters(), and the M1 has no GIC and hence no ICC_* system
+  # registers, so EDK2 always drives the GIC as a v2 over MMIO.
+  # Must match CPU_IFACE_BASE_36_BIT in m1n1_windows/src/hv_vgic.c.
+  #
+  gArmTokenSpaceGuid.PcdGicInterruptInterfaceBase|0xf30000000
 !endif
   gEfiMdeModulePkgTokenSpaceGuid.PcdAcpiDefaultOemRevision|0x00008103
 

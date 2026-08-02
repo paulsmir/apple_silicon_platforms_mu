@@ -35,3 +35,13 @@
   UefiBootServicesTableLib
   UefiLib
   AcpiPlatformUpdateLib
+
+[FixedPcd]
+  #
+  # Used to build the serial console device path so that it matches the one
+  # EmbeddedPkg's SimpleTextInOutSerial installs.
+  #
+  gEfiMdePkgTokenSpaceGuid.PcdUartDefaultBaudRate
+  gEfiMdePkgTokenSpaceGuid.PcdUartDefaultDataBits
+  gEfiMdePkgTokenSpaceGuid.PcdUartDefaultParity
+  gEfiMdePkgTokenSpaceGuid.PcdUartDefaultStopBits

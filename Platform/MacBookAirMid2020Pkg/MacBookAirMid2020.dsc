@@ -42,12 +42,68 @@
   gAppleSiliconPkgTokenSpaceGuid.PcdSmbiosSystemModel|"MacBook Air (Mid 2020)"
   gAppleSiliconPkgTokenSpaceGuid.PcdSmbiosSystemModelNumber|"MacBookAir10,1"
   gAppleSiliconPkgTokenSpaceGuid.PcdSmbiosSystemSku|"MacBook Air (MacBookAir10,1)"
+  # Every sibling M1 platform sets this; the Air did not, so it fell back to the .dec
+  # default of 1. AppleUsbTypeCBringupDxe skips index 0 (the DFU port), so with a count
+  # of 1 its loop body never runs at all and no USB controller is ever registered.
+  # The Air has two Type-C ports, hence two DWC3 controllers.
+  gAppleSiliconPkgTokenSpaceGuid.PcdAppleNumDwc3Controllers|2
+  # Gate for BootRamdiskHelperDxe; without it the driver exits before looking for the
+  # embedded image. Defaults to FALSE in AppleSiliconPkg.dec.
+  gAppleSiliconPkgTokenSpaceGuid.PcdInitializeRamdisk|TRUE
   
 
 [Components.common]
 
   MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTables.inf
 
+  # Built as a standalone application, deliberately NOT packaged into the FV: it is copied
+  # onto the embedded RAMDisk instead. Running it exercises LoadImage/StartImage from a FAT
+  # volume on BlockIo - the same path bootmgfw.efi takes - and the shell profile here has
+  # no built-in acpiview, so it doubles as the ACPI table dumper.
+  # Same idea: standalone, copied onto the RAMDisk, never packaged into the FV.
+  AppleSiliconPkg/Application/BootLaunchApp/BootLaunchApp.inf
+  AppleSiliconPkg/Application/BootLaunchApp/BootLaunchAppQemu.inf {
+    <LibraryClasses>
+      DebugLib|MdePkg/Library/UefiDebugLibConOut/UefiDebugLibConOut.inf
+  }
+
+  ShellPkg/Application/AcpiViewApp/AcpiViewApp.inf {
+    <LibraryClasses>
+      AcpiViewCommandLib|ShellPkg/Library/UefiShellAcpiViewCommandLib/UefiShellAcpiViewCommandLib.inf
+  }
+
+#
+# The family package was not included at all, unlike every sibling platform
+# (MacMini2020.dsc and MacBookProLate2020.dsc both pull theirs in first). Consequences:
+# DeviceFamilyAcpiTables.inf was never built, so AcpiPlatformDxe asserted looking for the
+# device family tables, and the family's display/console PCDs were never applied either.
+#
+!include MacBookAirFamilyPkg/MacBookAirFamily.dsc.inc
 !include T810XFamilyPkg/T810XFamilyPkg.dsc.inc
 !include AppleSiliconPkg/AppleSiliconPkg.dsc.inc
 !include AppleSiliconPkg/FrontpageDsc.inc
+#
+# Trim the debug output. The MemoryAttributesTable dump and the GCD memory space maps run
+# to hundreds of lines each and are emitted right at ReadyToBoot, drowning out exactly the
+# part we need to see: whether BDS calls StartImage for Boot0003 (Internal UEFI Shell) and
+# what it returns. Keep ERROR/WARN/INIT/LOAD/INFO/BM, drop VERBOSE, GCD, POOL and PAGE.
+#
+# DebugLib here is MdePkg/BaseDebugLibSerialPort, which honours this PCD.
+# Placed after the !include lines above so it is the last word on the value.
+#
+[PcdsFixedAtBuild.common]
+  # 0x40 = DEBUG_INFO. AppleUsbTypeCBringupDxe logs its whole bringup at INFO, so
+  # without this bit the driver is simply inaudible rather than silent.
+  gEfiMdePkgTokenSpaceGuid.PcdDebugPrintErrorLevel|0x80000447
+  #
+  # EfiBootManagerBoot() -> BmSetMemoryTypeInformationVariable() does a warm reset when the
+  # memory type information changes, so that the new pool sizes take effect. On real
+  # hardware that happens once: the variable persists and the next boot proceeds.
+  #
+  # Here there is no non-volatile variable storage -- the firmware is reloaded into RAM on
+  # every run -- so the variable is always "missing", and the machine reset forever, always
+  # before StartImage (hence no "Booting ..." line ever appeared in the log). Confirmed by
+  # instrumenting RuntimeServiceResetSystem: "RESET CALLED: type=1 status=Success
+  # caller=0x9DDB426DC" resolved to EfiBootManagerBoot +0xa2c.
+  #
+  gEfiMdeModulePkgTokenSpaceGuid.PcdResetOnMemoryTypeInformationChange|FALSE

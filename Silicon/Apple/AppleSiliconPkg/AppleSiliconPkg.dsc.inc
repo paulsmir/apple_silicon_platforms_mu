@@ -586,10 +586,12 @@
   ArmPkg/Drivers/CpuDxe/CpuDxe.inf
   ArmPkg/Drivers/TimerDxe/TimerDxe.inf
 !if $(AIC_BUILD) == FALSE
-  ArmPkg/Drivers/ArmGicDxe/ArmGicDxe.inf {
-    <LibraryClasses>
-	  ArmGicArchLib|AppleSiliconPkg/Library/ArmGicArchLib/ArmGicArchLib.inf
-  }
+  #
+  # AppleArmGicArchLib was removed in 455bba5; recent EDK2 integrated ArmGicArchLib
+  # into ArmGicDxe itself, so no override is needed (see Silicon/ARM/TIANO/ReadMe.rst).
+  # The matching reference at the top of this file was already commented out there.
+  #
+  ArmPkg/Drivers/ArmGicDxe/ArmGicDxe.inf
 !else
   AppleSiliconPkg/Drivers/AppleAicDxe/AppleAicDxe.inf
 !endif
@@ -667,7 +669,8 @@
   SecurityPkg/RandomNumberGenerator/RngDxe/RngDxe.inf
 
   # Disk IO
-  #TODO: ANS2/SART drivers 
+  # Native ANS2/SART stays in m1n1; the guest binds this generic driver to the
+  # standards-facing PCIe/NVMe bridge exposed by the hypervisor.
   MdeModulePkg/Universal/Disk/DiskIoDxe/DiskIoDxe.inf
   MdeModulePkg/Universal/Disk/PartitionDxe/PartitionDxe.inf
   MdeModulePkg/Universal/Disk/UnicodeCollation/EnglishDxe/EnglishDxe.inf
@@ -676,7 +679,7 @@
   MdeModulePkg/Bus/Scsi/ScsiBusDxe/ScsiBusDxe.inf
   MdeModulePkg/Bus/Scsi/ScsiDiskDxe/ScsiDiskDxe.inf
   MdeModulePkg/Universal/Disk/UdfDxe/UdfDxe.inf
-  #MdeModulePkg/Bus/Pci/NvmExpressDxe/NvmExpressDxe.inf
+  MdeModulePkg/Bus/Pci/NvmExpressDxe/NvmExpressDxe.inf
   MdeModulePkg/Universal/Disk/RamDiskDxe/RamDiskDxe.inf
   AppleSiliconPkg/Drivers/BootRamdiskHelperDxe/BootRamdiskHelperDxe.inf
 

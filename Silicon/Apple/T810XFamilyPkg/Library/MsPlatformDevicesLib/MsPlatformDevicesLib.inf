@@ -25,3 +25,25 @@
   PcBdsPkg/PcBdsPkg.dec
   MsCorePkg/MsCorePkg.dec
   MdeModulePkg/MdeModulePkg.dec
+
+[FixedPcd]
+  #
+  # Used to build the serial console device path so that it matches the one
+  # EmbeddedPkg's SimpleTextInOutSerial installs.
+  #
+  gEfiMdePkgTokenSpaceGuid.PcdUartDefaultBaudRate
+  gEfiMdePkgTokenSpaceGuid.PcdUartDefaultDataBits
+  gEfiMdePkgTokenSpaceGuid.PcdUartDefaultParity
+  gEfiMdePkgTokenSpaceGuid.PcdUartDefaultStopBits
+
+[LibraryClasses]
+  #
+  # Needed by GetPlatformPreferredConsole, which duplicates the serial console device path
+  # (the caller frees what it gets back, so a pointer to the static would corrupt the pool).
+  #
+  DebugLib
+  DevicePathLib
+  MemoryAllocationLib
+  UefiBootServicesTableLib
+  UefiLib
+  BaseLib

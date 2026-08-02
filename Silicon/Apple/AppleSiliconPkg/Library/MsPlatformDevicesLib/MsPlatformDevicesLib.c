@@ -24,6 +24,45 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 #include <Configuration/BootDevices.h>
 
 //
+// Serial console device path.
+//
+// This has to match, byte for byte, the path that EmbeddedPkg's SimpleTextInOutSerial
+// installs (see SimpleTextInOut.c: SIMPLE_TEXT_OUT_DEVICE_PATH mDevicePath), otherwise
+// BDS will not connect it: a vendor node carrying that driver's FILE_GUID, followed by a
+// UART node built from the same PCDs.
+//
+// Needed because the declarations below only ever listed the internal panel and keypad.
+// On a machine whose panel is dead (and where "DeviceBootManagerAfterConsole Unabled to
+// set graphics - Unsupported" is what the log says) that leaves no console at all, so the
+// UEFI Shell has nowhere to read from and exits immediately -- after which BDS runs out
+// of boot options and calls PSCI SYSTEM_RESET.
+//
+#define SERIAL_CONSOLE_DRIVER_GUID                                                     \
+  { 0x6696936D, 0x3637, 0x467C, { 0x87, 0xCB, 0x14, 0xEA, 0x82, 0x48, 0x94, 0x8C } }
+
+typedef struct {
+  VENDOR_DEVICE_PATH        Guid;
+  UART_DEVICE_PATH          Uart;
+  EFI_DEVICE_PATH_PROTOCOL  End;
+} SERIAL_CONSOLE_DEVICE_PATH;
+
+STATIC SERIAL_CONSOLE_DEVICE_PATH SerialConsoleDevicePath = {
+  {
+    { HARDWARE_DEVICE_PATH, HW_VENDOR_DP, { sizeof (VENDOR_DEVICE_PATH), 0 } },
+    SERIAL_CONSOLE_DRIVER_GUID
+  },
+  {
+    { MESSAGING_DEVICE_PATH, MSG_UART_DP, { sizeof (UART_DEVICE_PATH), 0 } },
+    0,                                      // Reserved
+    FixedPcdGet64 (PcdUartDefaultBaudRate),
+    FixedPcdGet8 (PcdUartDefaultDataBits),
+    FixedPcdGet8 (PcdUartDefaultParity),
+    FixedPcdGet8 (PcdUartDefaultStopBits)
+  },
+  { END_DEVICE_PATH_TYPE, END_ENTIRE_DEVICE_PATH_SUBTYPE, { sizeof (EFI_DEVICE_PATH_PROTOCOL), 0 } }
+};
+
+//
 // Predefined platform default console device path
 //
 BDS_CONSOLE_CONNECT_ENTRY gPlatformConsoles[] =
@@ -37,12 +76,19 @@ BDS_CONSOLE_CONNECT_ENTRY gPlatformConsoles[] =
     CONSOLE_OUT | STD_ERROR
   },
   {
+    (EFI_DEVICE_PATH_PROTOCOL *)&SerialConsoleDevicePath,
+    CONSOLE_IN | CONSOLE_OUT | STD_ERROR
+  },
+  {
     NULL,
     0
   }
 };
 
-EFI_DEVICE_PATH_PROTOCOL *gPlatformConInDeviceList[] = {NULL};
+EFI_DEVICE_PATH_PROTOCOL *gPlatformConInDeviceList[] = {
+  (EFI_DEVICE_PATH_PROTOCOL *)&SerialConsoleDevicePath,
+  NULL
+};
 
 /**
 Library function used to provide the platform SD Card device path

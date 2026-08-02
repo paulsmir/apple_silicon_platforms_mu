@@ -35,6 +35,7 @@
 #include <Library/PrintLib.h>
 #include <Library/PcdLib.h>
 #include <Library/DxeServicesLib.h>
+#include <Library/DxeServicesTableLib.h>
 #include <Library/PciLib.h>
 #include <Library/PciSegmentLib.h>
 #include <Library/PciExpressLib.h>
@@ -362,6 +363,23 @@ AppleSiliconPciPlatformDxeInitialize(
     //
 
     DEBUG((DEBUG_INFO, "%a - started\n", __FUNCTION__));
+
+    //
+    // Register the emulated-NVMe ECAM (PcdPciExpressBaseAddress = 0x690000000, 1 MB) as MMIO
+    // in the GCD, so it lands in the UEFI memory map and Windows can map the segment-0 config
+    // space. The Apple PCIe path below uses the real ADT `apcie` ECAM and never adds our PCD
+    // ECAM, so without this the region is absent from the map. The %r result is also a probe:
+    // "Access Denied" => it was already present (hypothesis wrong), "Success" => it was not.
+    //
+    {
+      EFI_STATUS GcdStatus = gDS->AddMemorySpace (
+                                    EfiGcdMemoryTypeMemoryMappedIo,
+                                    0x690000000, 0x100000, EFI_MEMORY_UC);
+      DEBUG ((DEBUG_ERROR, "ECAM GCD AddMemorySpace(0x690000000,0x100000) = %r\n", GcdStatus));
+      if (!EFI_ERROR (GcdStatus)) {
+        gDS->SetMemorySpaceAttributes (0x690000000, 0x100000, EFI_MEMORY_UC);
+      }
+    }
 
     //
     // Pull the ECAM base address from the FDT. Ditto for "rc" base address.

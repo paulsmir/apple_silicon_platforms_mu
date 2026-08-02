@@ -1,0 +1,45 @@
+/**
+ * MCFG.aslc
+ *
+ * PCI Express Memory Mapped Configuration Space (ECAM) table for the emulated PCIe root.
+ * Points the OS at the single-bus ECAM window that m1n1's hv_pci.c traps and services.
+ * Base must match PcdPciExpressBaseAddress / the hv_pci_init() argument (0x690000000).
+ *
+ * SPDX-License-Identifier: BSD-2-Clause-Patent OR MIT
+ */
+
+#include <Library/AcpiLib.h>
+#include <Library/PcdLib.h>
+#include <IndustryStandard/Acpi.h>
+#include <IndustryStandard/MemoryMappedConfigurationSpaceAccessTable.h>
+#include <Acpi/AcpiHeader.h>
+
+#pragma pack(1)
+typedef struct {
+  EFI_ACPI_MEMORY_MAPPED_CONFIGURATION_BASE_ADDRESS_TABLE_HEADER                        Header;
+  EFI_ACPI_MEMORY_MAPPED_ENHANCED_CONFIGURATION_SPACE_BASE_ADDRESS_ALLOCATION_STRUCTURE Segment;
+} MCFG_TABLE;
+#pragma pack()
+
+STATIC MCFG_TABLE Mcfg = {
+  {
+    __ACPI_HEADER (
+      EFI_ACPI_6_5_PCI_EXPRESS_MEMORY_MAPPED_CONFIGURATION_SPACE_BASE_ADDRESS_DESCRIPTION_TABLE_SIGNATURE,
+      MCFG_TABLE,
+      EFI_ACPI_MEMORY_MAPPED_CONFIGURATION_SPACE_ACCESS_TABLE_REVISION
+      ),
+    0 // Reserved
+  },
+  {
+    0x0000000690000000, // BaseAddress - ECAM (hv_pci hook overrides the arm-io pass-through)
+    0x0000,             // PciSegmentGroupNumber
+    0x00,               // StartBusNumber
+    0x00,               // EndBusNumber - single bus (1 MB window)
+    0x00000000          // Reserved
+  }
+};
+
+//
+// Reference the table so the optimizer keeps it.
+//
+VOID* CONST ReferenceAcpiTable = &Mcfg;

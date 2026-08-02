@@ -26,11 +26,12 @@
 #include <Library/IoLib.h>
 #include <Library/PrintLib.h>
 #include <Library/AppleDTLib.h>
+#include <Library/VirtualDisplayValidation.h>
 
 //Device memory map configuration file for UEFI (this is to help with pagetable initialization)
 #include <Library/T810XFamilyVirtualMemoryMapDefines.h>
 
-#define MAX_VIRTUAL_MEMORY_MAP_DESCRIPTORS 18
+#define MAX_VIRTUAL_MEMORY_MAP_DESCRIPTORS 19  // +1 for the low-memory window
 
 #define DDR_ATTRIBUTES_CACHED           ARM_MEMORY_REGION_ATTRIBUTE_WRITE_BACK
 #define DDR_ATTRIBUTES_UNCACHED         ARM_MEMORY_REGION_ATTRIBUTE_UNCACHED_UNBUFFERED
@@ -147,6 +148,8 @@ EFI_STATUS EFIAPI MemoryPeim(IN EFI_PHYSICAL_ADDRESS UefiMemoryBase, IN UINT64 U
   EFI_PHYSICAL_ADDRESS          FdTop;
   EFI_PHYSICAL_ADDRESS          SystemMemoryTop;
   EFI_PHYSICAL_ADDRESS          ResourceTop;
+  EFI_PHYSICAL_ADDRESS          FrameBufferBase;
+  UINT64                        FrameBufferSize;
   BOOLEAN                       Found;
 
   // build up virtual memory map
@@ -272,6 +275,32 @@ EFI_STATUS EFIAPI MemoryPeim(IN EFI_PHYSICAL_ADDRESS UefiMemoryBase, IN UINT64 U
 
     ASSERT (Found);
   }
+
+  //
+  // The framebuffer is ordinary DRAM shared by GOP, Windows BasicDisplay, and the host
+  // stream reader. Remove it from the system-memory resource and describe it as reserved
+  // before DXE can allocate any of these pages for another purpose.
+  //
+  FrameBufferBase = PcdGet64 (PcdFrameBufferAddress);
+  FrameBufferSize = PcdGet64 (PcdFrameBufferSize);
+  if (!VirtualDisplayValidateFramebufferRange (
+         FrameBufferBase,
+         FrameBufferSize,
+         PcdGet64 (PcdSystemMemoryBase),
+         PcdGet64 (PcdSystemMemorySize)
+         )) {
+    DEBUG ((DEBUG_ERROR,
+      "MemoryInitPeiLib: invalid framebuffer range 0x%llx + 0x%llx (RAM 0x%llx + 0x%llx)\n",
+      FrameBufferBase, FrameBufferSize, PcdGet64 (PcdSystemMemoryBase),
+      PcdGet64 (PcdSystemMemorySize)));
+    ASSERT (FALSE);
+    return EFI_INVALID_PARAMETER;
+  }
+
+  DEBUG ((DEBUG_INFO, "MemoryInitPeiLib: reserving framebuffer 0x%llx + 0x%llx\n",
+          FrameBufferBase, FrameBufferSize));
+  ReserveMemoryRegion (FrameBufferBase, (UINT32)FrameBufferSize);
+  BuildMemoryAllocationHob (FrameBufferBase, FrameBufferSize, EfiReservedMemoryType);
   
   //reserve secondary stacks carveouts passed into cpm-impl-reg 
   for(int i = 0; i < PcdGet32(PcdCoreCount); i++){
@@ -280,7 +309,24 @@ EFI_STATUS EFIAPI MemoryPeim(IN EFI_PHYSICAL_ADDRESS UefiMemoryBase, IN UINT64 U
 
     AsciiSPrint(CpuNodeName, ARRAY_SIZE(CpuNodeName), "/cpus/cpu%d", i);
     dt_node_t *CpuNode = dt_get(CpuNodeName);
+
+    //
+    // A CPU can legitimately be missing from the ADT: m1n1's hypervisor deletes the node of
+    // whichever core it reserves for its own watchdog. The node has to be checked here and
+    // not after reading the property - dt_node_prop() dereferences the node itself, so a
+    // NULL node faults inside it, before there is any result to test.
+    //
+    if (CpuNode == NULL) {
+      DEBUG ((DEBUG_INFO, "MemoryInitPeiLib: %a is absent, skipping its carveout\n", CpuNodeName));
+      continue;
+    }
+
     UINT32 *Carveout = (UINT32 *)dt_node_prop(CpuNode, "cpm-impl-reg", &CarveoutLength);
+
+    if ((Carveout == NULL) || (CarveoutLength < 4 * sizeof (UINT32))) {
+      DEBUG ((DEBUG_INFO, "MemoryInitPeiLib: no cpm-impl-reg for %a, skipping\n", CpuNodeName));
+      continue;
+    }
 
     ReserveMemoryRegion (
       ((UINT64)Carveout[1] << 32) | Carveout[0],
@@ -289,6 +335,45 @@ EFI_STATUS EFIAPI MemoryPeim(IN EFI_PHYSICAL_ADDRESS UefiMemoryBase, IN UINT64 U
   }
 
 
+
+  //
+  // Reserve the window a preloaded RAMDisk is dropped into. Anything larger than a few
+  // tens of megabytes cannot travel inside the firmware volume - FvMain is decompressed
+  // whole during PrePi, and a 64 MB image already fails there with Out of Resources - so
+  // the image is written straight into guest memory instead and only registered here.
+  // Punching the hole in PEI is what keeps DXE from allocating over it.
+  //
+  if ((PcdGet64 (PcdPreloadedRamdiskBase) != 0) && (PcdGet32 (PcdPreloadedRamdiskMaxSize) != 0)) {
+    DEBUG ((DEBUG_INFO, "MemoryInitPeiLib: reserving preloaded RAMDisk window 0x%llx + 0x%x\n",
+            PcdGet64 (PcdPreloadedRamdiskBase), PcdGet32 (PcdPreloadedRamdiskMaxSize)));
+    ReserveMemoryRegion (
+      PcdGet64 (PcdPreloadedRamdiskBase),
+      PcdGet32 (PcdPreloadedRamdiskMaxSize)
+      );
+  }
+
+  //
+  // Declare the low DRAM window as usable system memory, and take its backing store out
+  // of the normal map so the same physical pages are not handed out twice under two
+  // different addresses.
+  //
+  if (PcdGet32 (PcdLowMemoryWindowSize) != 0) {
+    DEBUG ((DEBUG_INFO, "MemoryInitPeiLib: low DRAM window 0x%llx + 0x%x, backed by 0x%llx\n",
+            PcdGet64 (PcdLowMemoryWindowBase), PcdGet32 (PcdLowMemoryWindowSize),
+            PcdGet64 (PcdLowMemoryWindowBackingBase)));
+
+    ReserveMemoryRegion (
+      PcdGet64 (PcdLowMemoryWindowBackingBase),
+      PcdGet32 (PcdLowMemoryWindowSize)
+      );
+
+    BuildResourceDescriptorHob (
+      EFI_RESOURCE_SYSTEM_MEMORY,
+      ResourceAttributes,
+      PcdGet64 (PcdLowMemoryWindowBase),
+      PcdGet32 (PcdLowMemoryWindowSize)
+      );
+  }
 
   // Build Memory Allocation Hob
   InitMmu (MemoryTable);
@@ -414,6 +499,19 @@ VOID BuildVirtualMemoryMap(OUT ARM_MEMORY_REGION_DESCRIPTOR **VirtualMemoryMap)
   VirtualMemoryTable[Index].VirtualBase    = PcdGet64(PcdSystemMemoryBase);
   VirtualMemoryTable[Index].Length         = PcdGet64(PcdSystemMemorySize);
   VirtualMemoryTable[Index].Attributes     = CacheAttributes;
+
+  //
+  // Low DRAM window. Apple DRAM starts at 0x800000000, but the Windows boot manager asks
+  // for pages at low physical addresses (observed: a single page at 0x102000, after which
+  // it returns EFI_INVALID_PARAMETER). The hypervisor aliases this range onto real memory
+  // via stage-2, so from here it is ordinary cached DRAM.
+  //
+  if (PcdGet32 (PcdLowMemoryWindowSize) != 0) {
+    VirtualMemoryTable[++Index].PhysicalBase = PcdGet64 (PcdLowMemoryWindowBase);
+    VirtualMemoryTable[Index].VirtualBase    = PcdGet64 (PcdLowMemoryWindowBase);
+    VirtualMemoryTable[Index].Length         = PcdGet32 (PcdLowMemoryWindowSize);
+    VirtualMemoryTable[Index].Attributes     = CacheAttributes;
+  }
 
 
   DEBUG ((

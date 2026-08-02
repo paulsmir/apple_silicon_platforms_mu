@@ -19,8 +19,10 @@
 [Sources]
   #Bert.asl
   DBG2.aslc
+  MCFG.aslc
   #EINJ.asl
-  #DSDT.asl
+  # Windows will not boot without a DSDT; the file was written but never enabled.
+  DSDT.asl
 
 [Packages]
   ArmPkg/ArmPkg.dec
