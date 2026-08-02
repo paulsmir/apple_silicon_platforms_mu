@@ -3,7 +3,8 @@
 	url = https://github.com/Microsoft/mu_basecore.git
 [submodule "Common/MU"]
 	path = Common/MU
-	url = https://github.com/Microsoft/mu_plus.git
+	url = https://github.com/paulsmir/apple_silicon_platforms_mu.git
+	branch = dep/mu_plus-j313
 [submodule "Common/TIANO"]
 	path = Common/TIANO
 	url = https://github.com/Microsoft/mu_tiano_plus.git
