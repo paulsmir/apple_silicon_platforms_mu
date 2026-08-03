@@ -62,6 +62,7 @@
   # no built-in acpiview, so it doubles as the ACPI table dumper.
   # Same idea: standalone, copied onto the RAMDisk, never packaged into the FV.
   AppleSiliconPkg/Application/BootLaunchApp/BootLaunchApp.inf
+  AppleSiliconPkg/Drivers/WindowsAutoBootDxe/WindowsAutoBootDxe.inf
   AppleSiliconPkg/Application/BootLaunchApp/BootLaunchAppQemu.inf {
     <LibraryClasses>
       DebugLib|MdePkg/Library/UefiDebugLibConOut/UefiDebugLibConOut.inf
