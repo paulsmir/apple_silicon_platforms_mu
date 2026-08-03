@@ -81,6 +81,7 @@
 #
 !include MacBookAirFamilyPkg/MacBookAirFamily.dsc.inc
 !include T810XFamilyPkg/T810XFamilyPkg.dsc.inc
+!include MacBookAirMid2020Pkg/J313GuestLayout.dsc.inc
 !include AppleSiliconPkg/AppleSiliconPkg.dsc.inc
 !include AppleSiliconPkg/FrontpageDsc.inc
 #
