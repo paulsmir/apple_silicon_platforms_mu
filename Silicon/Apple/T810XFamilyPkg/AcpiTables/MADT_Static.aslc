@@ -95,16 +95,16 @@ MULTIPLE_APIC_DESCRIPTION_TABLE Madt = {
         0, 0, 25, 0 /* GicRBase */, 0, 0),
     EFI_ACPI_6_3_GICC_STRUCTURE_INIT( // Firestorm-0 (P-core cluster 0)
         4, 4, GET_MPIDR(0, 1, 1, 0),  EFI_ACPI_6_3_GIC_ENABLED, 58, 0,
-        0, 0, 25, 0 /* GicRBase */, 0, 0),
+        0, 0, 25, 0 /* GicRBase */, 1, 0),
     EFI_ACPI_6_3_GICC_STRUCTURE_INIT( // Firestorm-1 (P-core cluster 0)
-        5, 5, GET_MPIDR(0, 1, 1, 1),  0 /* disabled: single-core (SMP-under-HV unimpl) */, 62, 0,
-        0, 0, 25, 0 /* GicRBase */, 0, 0),
+        5, 5, GET_MPIDR(0, 1, 1, 1),  EFI_ACPI_6_3_GIC_ENABLED, 62, 0,
+        0, 0, 25, 0 /* GicRBase */, 1, 0),
     EFI_ACPI_6_3_GICC_STRUCTURE_INIT( // Firestorm-2 (P-core cluster 0)
-        6, 6, GET_MPIDR(0, 1, 1, 2),  0 /* disabled: single-core (SMP-under-HV unimpl) */, 34, 0,
-        0, 0, 25, 0 /* GicRBase */, 0, 0),
+        6, 6, GET_MPIDR(0, 1, 1, 2),  EFI_ACPI_6_3_GIC_ENABLED, 34, 0,
+        0, 0, 25, 0 /* GicRBase */, 1, 0),
     EFI_ACPI_6_3_GICC_STRUCTURE_INIT( // // Firestorm-3 (P-core cluster 0)
-        7, 7, GET_MPIDR(0, 1, 1, 3),  0 /* disabled: single-core (SMP-under-HV unimpl) */, 38, 0,
-        0, 0, 25, 0 /* GicRBase */, 0, 0),
+        7, 7, GET_MPIDR(0, 1, 1, 3),  EFI_ACPI_6_3_GIC_ENABLED, 38, 0,
+        0, 0, 25, 0 /* GicRBase */, 1, 0),
 },
 EFI_ACPI_6_0_GIC_DISTRIBUTOR_INIT(0, FixedPcdGet64 (PcdGicDistributorBase), 0, 3),
 // Format: EFI_ACPI_6_3_GIC_MSI_FRAME_INIT(GicMsiFrameId, PhysicalBaseAddress, Flags, SPICount, SPIBase)
