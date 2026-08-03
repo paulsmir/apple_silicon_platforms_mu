@@ -704,14 +704,14 @@ BuildPathFromShellArg (
   }
 
   if (*FileName == L'\0') {
-    Print (L"Путь должен содержать '\\', например FS2:\\EFI\\BOOT\\BOOTAA64.EFI\n");
+    Print (L"The path must contain '\\', for example FS2:\\EFI\\BOOT\\BOOTAA64.EFI\n");
     return NULL;
   }
 
   Status = gBS->LocateHandleBuffer (ByProtocol, &gEfiSimpleFileSystemProtocolGuid,
                                     NULL, &Count, &Handles);
   if (EFI_ERROR (Status)) {
-    Print (L"Нет ни одной файловой системы: %r\n", Status);
+    Print (L"No filesystem is available: %r\n", Status);
     return NULL;
   }
 
@@ -736,7 +736,7 @@ BuildPathFromShellArg (
   }
 
   FreePool (Handles);
-  Print (L"Не нашёл том, содержащий %s\n", FileName);
+  Print (L"No volume contains %s\n", FileName);
   return NULL;
 }
 
@@ -758,8 +758,8 @@ BootLaunchAppEntry (
 
   Status = gBS->HandleProtocol (ImageHandle, &gEfiShellParametersProtocolGuid, (VOID **)&Params);
   if (EFI_ERROR (Status) || (Params->Argc < 2)) {
-    Print (L"Использование: BootLaunchApp.efi <путь к .efi> [-q]\n");
-    Print (L"  -q  показывать только неудачные вызовы\n");
+    Print (L"Usage: BootLaunchApp.efi <path-to-.efi> [-q]\n");
+    Print (L"  -q  show failed calls only\n");
     return EFI_INVALID_PARAMETER;
   }
 
@@ -796,7 +796,7 @@ BootLaunchAppEntry (
   ExitData     = NULL;
   ExitDataSize = 0;
 
-  DEBUG ((DEBUG_ERROR, "=== BootLaunchApp: трассировка включена ===\n"));
+  DEBUG ((DEBUG_ERROR, "=== BootLaunchApp: tracing enabled ===\n"));
   InstallHooks ();
   Status = mStartImage (NewImage, &ExitDataSize, &ExitData);
   RemoveHooks ();
