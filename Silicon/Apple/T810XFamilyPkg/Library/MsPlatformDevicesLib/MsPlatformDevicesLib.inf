@@ -45,5 +45,4 @@
   DevicePathLib
   MemoryAllocationLib
   UefiBootServicesTableLib
-  UefiLib
   BaseLib

@@ -9,6 +9,7 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 #include <Uefi.h>
 
 #include <Protocol/DevicePath.h>
+#include <Protocol/GraphicsOutput.h>
 
 #include <Guid/SerialPortLibVendor.h>
 #include <Guid/TtyTerm.h>
@@ -22,7 +23,6 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 #include <Library/MsPlatformDevicesLib.h>
 #include <Library/PcdLib.h>
 #include <Library/UefiBootServicesTableLib.h>
-#include <Library/UefiLib.h>
 #include <Library/BaseLib.h>
 
 typedef struct {
@@ -165,50 +165,6 @@ GetPlatformConnectList (
 }
 
 /**
-  Point gST->ConOut at the serial console. See the ReadyToBoot hook below for why this is
-  done here and not during console setup.
-**/
-STATIC
-VOID
-EFIAPI
-SerialConsoleOnReadyToBoot (
-  IN EFI_EVENT  Event,
-  IN VOID       *Context
-  )
-{
-  EFI_STATUS                       Status;
-  EFI_HANDLE                       Handle   = NULL;
-  EFI_DEVICE_PATH_PROTOCOL         *WalkPath =
-    (EFI_DEVICE_PATH_PROTOCOL *)&SerialConsoleDevicePath;
-  EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL  *TextOut = NULL;
-
-  Status = gBS->LocateDevicePath (&gEfiSimpleTextOutProtocolGuid, &WalkPath, &Handle);
-  if (EFI_ERROR (Status) || (Handle == NULL)) {
-    DEBUG ((DEBUG_ERROR, "SERIALCON: ReadyToBoot - handle not found: %r\n", Status));
-    return;
-  }
-
-  Status = gBS->HandleProtocol (Handle, &gEfiSimpleTextOutProtocolGuid, (VOID **)&TextOut);
-  if (EFI_ERROR (Status) || (TextOut == NULL)) {
-    DEBUG ((DEBUG_ERROR, "SERIALCON: ReadyToBoot - no SimpleTextOut: %r\n", Status));
-    return;
-  }
-
-  gST->ConsoleOutHandle = Handle;
-  gST->ConOut           = TextOut;
-  gST->StandardErrorHandle = Handle;
-  gST->StdErr              = TextOut;
-
-  //
-  // The system table is CRC-checked, so it has to be recomputed after editing it.
-  //
-  gST->Hdr.CRC32 = 0;
-  gBS->CalculateCrc32 (gST, gST->Hdr.HeaderSize, &gST->Hdr.CRC32);
-
-  DEBUG ((DEBUG_ERROR, "SERIALCON: ConOut repointed to the serial console\n"));
-}
-
-/**
  * Library function used to provide the list of platform console devices.
  */
 BDS_CONSOLE_CONNECT_ENTRY *
@@ -236,35 +192,12 @@ GetPlatformConsoleList (
   }
 
   //
-  // Repoint gST->ConOut at the serial console when ReadyToBoot fires.
+  // Keep the GOP handle as gST->ConsoleOutHandle through ReadyToBoot. Windows carries the
+  // firmware console identity into its BasicDisplay handoff; replacing it with the serial
+  // terminal lets winload draw but leaves the installed OS with a black framebuffer once
+  // boot graphics ends. The serial terminal remains a declared secondary console and the
+  // platform DebugLib continues to write diagnostics directly to UART.
   //
-  // Everything up to here is already correct: the device path matches the driver's byte
-  // for byte, and the ConOut variable contains it (dumped: 67 bytes, GOP + serial).
-  // ConSplitter still does not route to it -- SimpleTextInOutSerial installs its protocols
-  // on a handle it makes itself and assigns gST->ConIn/ConOut directly, and ConSplitter
-  // later overwrites gST->ConOut with an aggregate that does not include it. Input kept
-  // working precisely because the driver's gST->ConIn assignment survived.
-  //
-  // Doing the switch at ReadyToBoot rather than earlier matters: when the serial console
-  // was made the *preferred* console, MsBootPolicy hung ("Unable to set console mode -
-  // Unsupported") long before the Shell was reached. ReadyToBoot is signalled immediately
-  // before StartImage, so all the graphics-dependent BDS work is already done.
-  //
-  {
-    STATIC EFI_EVENT  ReadyToBootEvent = NULL;
-
-    if (ReadyToBootEvent == NULL) {
-      EFI_STATUS  RtbStatus;
-
-      RtbStatus = EfiCreateEventReadyToBootEx (
-                    TPL_CALLBACK,
-                    SerialConsoleOnReadyToBoot,
-                    NULL,
-                    &ReadyToBootEvent
-                    );
-      DEBUG ((DEBUG_ERROR, "SERIALCON: ReadyToBoot hook = %r\n", RtbStatus));
-    }
-  }
 
   //
   // Connect the serial console handle explicitly.
