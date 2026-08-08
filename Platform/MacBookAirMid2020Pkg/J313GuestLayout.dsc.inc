@@ -3,7 +3,7 @@
   # Mu is built for the pinned guest layout shared by the assisted and autonomous
   # hypervisor paths. Moving one of these regions independently makes early PrePi
   # dereference an unmapped or unrelated guest address.
-  gAppleSiliconPkgTokenSpaceGuid.PcdBootArgsPointer|0x854000000
+  gAppleSiliconPkgTokenSpaceGuid.PcdBootArgsPointer|0x8533e8000
   gAppleSiliconPkgTokenSpaceGuid.PcdAdtPointer|0x851000000
   # A preloaded development RAM disk is carved out before DXE allocates guest RAM.
   gAppleSiliconPkgTokenSpaceGuid.PcdPreloadedRamdiskBase|0x860000000
