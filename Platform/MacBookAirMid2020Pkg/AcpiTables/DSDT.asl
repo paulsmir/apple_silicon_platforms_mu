@@ -22,7 +22,7 @@
         // Generated from config/j313-apple-input.json.  Keep the firmware,
         // hypervisor, and Windows driver resource contracts byte-for-byte in
         // sync; never duplicate these machine-specific values in this DSDT.
-        #include "J313AppleInput.asl.inc"
+        Include ("J313AppleInput.asl.inc")
 
         //
         // Cluster low power states. On T8101/T8103, there are only 2 clusters, the P and E core clusters,
