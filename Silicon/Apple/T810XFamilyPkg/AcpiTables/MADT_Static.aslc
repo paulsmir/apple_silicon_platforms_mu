@@ -94,12 +94,12 @@ MULTIPLE_APIC_DESCRIPTION_TABLE Madt = {
         3, 3, GET_MPIDR(0, 0, 0, 3),  EFI_ACPI_6_3_GIC_ENABLED, 54, 0,
         0, 0, 25, 0 /* GicRBase */, 0, 0),
     EFI_ACPI_6_3_GICC_STRUCTURE_INIT( // Firestorm-0 (P-core cluster 0)
-        // Isolated 4E+1P experiment: expose only the first Firestorm core.
-        // Keep the other P-cores hidden until this startup path is validated.
+        // Incremental 4E+2P experiment: expose two Firestorm cores only.
+        // Keep the remaining P-cores hidden so UID5 is the sole new variable.
         4, 4, GET_MPIDR(0, 1, 1, 0),  EFI_ACPI_6_3_GIC_ENABLED, 58, 0,
         0, 0, 25, 0 /* GicRBase */, 1, 0),
     EFI_ACPI_6_3_GICC_STRUCTURE_INIT( // Firestorm-1 (P-core cluster 0)
-        5, 5, GET_MPIDR(0, 1, 1, 1),  0, 62, 0,
+        5, 5, GET_MPIDR(0, 1, 1, 1),  EFI_ACPI_6_3_GIC_ENABLED, 62, 0,
         0, 0, 25, 0 /* GicRBase */, 1, 0),
     EFI_ACPI_6_3_GICC_STRUCTURE_INIT( // Firestorm-2 (P-core cluster 0)
         6, 6, GET_MPIDR(0, 1, 1, 2),  0, 34, 0,
