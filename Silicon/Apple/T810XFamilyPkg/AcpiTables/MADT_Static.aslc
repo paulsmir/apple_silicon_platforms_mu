@@ -94,8 +94,8 @@ MULTIPLE_APIC_DESCRIPTION_TABLE Madt = {
         3, 3, GET_MPIDR(0, 0, 0, 3),  EFI_ACPI_6_3_GIC_ENABLED, 54, 0,
         0, 0, 25, 0 /* GicRBase */, 0, 0),
     EFI_ACPI_6_3_GICC_STRUCTURE_INIT( // Firestorm-0 (P-core cluster 0)
-        // Incremental 4E+3P experiment: expose three Firestorm cores only.
-        // Keep UID7 hidden so UID6 is the sole new variable.
+        // Incremental 4E+4P experiment: expose the complete Firestorm cluster.
+        // UID7 is the sole new variable from the validated 4E+3P checkpoint.
         4, 4, GET_MPIDR(0, 1, 1, 0),  EFI_ACPI_6_3_GIC_ENABLED, 58, 0,
         0, 0, 25, 0 /* GicRBase */, 1, 0),
     EFI_ACPI_6_3_GICC_STRUCTURE_INIT( // Firestorm-1 (P-core cluster 0)
@@ -105,7 +105,7 @@ MULTIPLE_APIC_DESCRIPTION_TABLE Madt = {
         6, 6, GET_MPIDR(0, 1, 1, 2),  EFI_ACPI_6_3_GIC_ENABLED, 34, 0,
         0, 0, 25, 0 /* GicRBase */, 1, 0),
     EFI_ACPI_6_3_GICC_STRUCTURE_INIT( // // Firestorm-3 (P-core cluster 0)
-        7, 7, GET_MPIDR(0, 1, 1, 3),  0, 38, 0,
+        7, 7, GET_MPIDR(0, 1, 1, 3),  EFI_ACPI_6_3_GIC_ENABLED, 38, 0,
         0, 0, 25, 0 /* GicRBase */, 1, 0),
 },
 EFI_ACPI_6_0_GIC_DISTRIBUTOR_INIT(0, FixedPcdGet64 (PcdGicDistributorBase), 0, 3),
