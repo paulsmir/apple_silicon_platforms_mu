@@ -271,9 +271,10 @@ READ_LOCK_STATUS   = TRUE
   INF MdeModulePkg/Universal/Acpi/AcpiTableDxe/AcpiTableDxe.inf
   INF AppleSiliconPkg/Drivers/AcpiPlatformDxe/AcpiPlatformDxe.inf
   INF MdeModulePkg/Universal/Acpi/BootGraphicsResourceTableDxe/BootGraphicsResourceTableDxe.inf
-  INF RuleOverride=ACPITABLE MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTables.inf
 !if $(J313_AGX_G2_PROFILE) == TRUE
-  INF RuleOverride=ACPITABLE MacBookAirMid2020Pkg/AcpiTables/J313AppleAgxAcpiTables.inf
+  INF RuleOverride=ACPITABLE MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTablesG2.inf
+!else
+  INF RuleOverride=ACPITABLE MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTables.inf
 !endif # J313_AGX_G2_PROFILE
   INF RuleOverride=ACPITABLE T810XFamilyPkg/AcpiTables/CPUAcpiTables.inf
   #

@@ -56,9 +56,10 @@
 
 [Components.common]
 
-  MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTables.inf
 !if $(J313_AGX_G2_PROFILE) == TRUE
-  MacBookAirMid2020Pkg/AcpiTables/J313AppleAgxAcpiTables.inf
+  MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTablesG2.inf
+!else
+  MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTables.inf
 !endif # J313_AGX_G2_PROFILE
 
   # Built as a standalone application, deliberately NOT packaged into the FV: it is copied

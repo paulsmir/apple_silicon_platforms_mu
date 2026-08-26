@@ -1,0 +1,50 @@
+## @file
+#  J313 device ACPI storage for the opt-in AGX G2 profile.
+#
+#  AcpiPlatformDxe reads only the firmware file selected by
+#  PcdDeviceAcpiTableStorageFile.  This profile therefore keeps the same file
+#  GUID and baseline tables as DeviceAcpiTables.inf, and adds the AGX SSDT as
+#  one more RAW section in that live storage file.
+#
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = DeviceAcpiTablesG2
+  FILE_GUID                      = 3ff4732c-9411-4e10-a10c-8b39df282e83
+  MODULE_TYPE                    = USER_DEFINED
+  VERSION_STRING                 = 1.0
+
+[Sources]
+  DBG2.aslc
+  MCFG.aslc
+  DSDT.asl
+  J313AppleAgxSsdt.asl
+
+[Packages]
+  ArmPkg/ArmPkg.dec
+  ArmPlatformPkg/ArmPlatformPkg.dec
+  EmbeddedPkg/EmbeddedPkg.dec
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+  AppleSiliconPkg/AppleSiliconPkg.dec
+
+[FixedPcd]
+  gEfiMdeModulePkgTokenSpaceGuid.PcdAcpiDefaultCreatorId          ## CONSUMES
+  gEfiMdeModulePkgTokenSpaceGuid.PcdAcpiDefaultCreatorRevision    ## CONSUMES
+  gEfiMdeModulePkgTokenSpaceGuid.PcdAcpiDefaultOemId              ## CONSUMES
+  gEfiMdeModulePkgTokenSpaceGuid.PcdAcpiDefaultOemTableId         ## CONSUMES
+  gEfiMdeModulePkgTokenSpaceGuid.PcdAcpiDefaultOemRevision        ## CONSUMES
+  gArmTokenSpaceGuid.PcdPciBusMin
+  gArmTokenSpaceGuid.PcdPciBusMax
+  gArmTokenSpaceGuid.PcdPciMmio32Base
+  gArmTokenSpaceGuid.PcdPciMmio32Size
+  gEfiMdePkgTokenSpaceGuid.PcdPciMmio32Translation
+  gEfiMdePkgTokenSpaceGuid.PcdPciMmio64Translation
+  gArmTokenSpaceGuid.PcdPciMmio64Base
+  gArmTokenSpaceGuid.PcdPciMmio64Size
+  gEfiMdePkgTokenSpaceGuid.PcdPciExpressBaseAddress
+  gAppleSiliconPkgTokenSpaceGuid.PcdPciExpressBarSize
+  gAppleSiliconPkgTokenSpaceGuid.PcdPciExpressBarLimit
+  gAppleSiliconPkgTokenSpaceGuid.PcdAppleUartBase
