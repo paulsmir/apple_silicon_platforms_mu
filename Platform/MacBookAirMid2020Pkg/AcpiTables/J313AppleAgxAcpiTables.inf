@@ -1,0 +1,18 @@
+## @file
+#  Opt-in J313 Apple AGX G2 ACPI table.
+#
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = J313AppleAgxAcpiTables
+  FILE_GUID                      = f6697335-0bff-5fc5-b23a-edb2b342123c
+  MODULE_TYPE                    = USER_DEFINED
+  VERSION_STRING                 = 1.0
+
+[Sources]
+  J313AppleAgxSsdt.asl
+
+[Packages]
+  MdePkg/MdePkg.dec

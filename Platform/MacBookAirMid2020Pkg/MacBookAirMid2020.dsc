@@ -33,6 +33,8 @@
   AIC_BUILD                      = TRUE #AIC build enabled by default, change to false if you want to use a vGIC
   USES_MAC_CPU                   = TRUE # a futureproofing switch, changes SoC identifier in SMBIOS
   NETWORK_TLS_ENABLE             = TRUE
+  # Enumeration-only AGX G2 profile.  Stable builds must keep this FALSE.
+  J313_AGX_G2_PROFILE            = FALSE
 
 [BuildOptions.common]
   GCC:*_*_AARCH64_CC_FLAGS = -DSILICON_PLATFORM=8103
@@ -55,6 +57,9 @@
 [Components.common]
 
   MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTables.inf
+!if $(J313_AGX_G2_PROFILE) == TRUE
+  MacBookAirMid2020Pkg/AcpiTables/J313AppleAgxAcpiTables.inf
+!endif # J313_AGX_G2_PROFILE
 
   # Built as a standalone application, deliberately NOT packaged into the FV: it is copied
   # onto the embedded RAMDisk instead. Running it exercises LoadImage/StartImage from a FAT
