@@ -13,6 +13,10 @@ Device (AGX0)
             0x0000000004000000, ,, , AddressRangeMemory, TypeStatic)
         QWordMemory (ResourceConsumer, PosDecode, MinFixed, MaxFixed,
             NonCacheable, ReadWrite, 0x0,
+            0x00000009FFFB8000, 0x00000009FFFBBFFF, 0x0,
+            0x0000000000004000, ,, , AddressRangeMemory, TypeStatic)
+        QWordMemory (ResourceConsumer, PosDecode, MinFixed, MaxFixed,
+            NonCacheable, ReadWrite, 0x0,
             0x0000000300000000, 0x0000000300000FFF, 0x0,
             0x0000000000001000, ,, , AddressRangeMemory, TypeStatic)
         Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive)
@@ -39,7 +43,7 @@ Device (AGX0)
         ToUUID ("daffd814-6eba-4d8c-8a91-bc9bbf4aa301"),
         Package ()
         {
-            Package () { "agx-contract-version", 0x02 },
+            Package () { "agx-contract-version", 0x03 },
             Package () { "agx-source-contract-sha256", "b049a055eba8536caeda7d1a8bac90b81ab6357e64d3f9cb600fff4691d7e3a7" },
             Package () { "agx-firmware-generation", "G13" },
             Package () { "agx-firmware-version", "V13_5" }
