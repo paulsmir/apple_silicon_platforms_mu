@@ -271,11 +271,13 @@ READ_LOCK_STATUS   = TRUE
   INF MdeModulePkg/Universal/Acpi/AcpiTableDxe/AcpiTableDxe.inf
   INF AppleSiliconPkg/Drivers/AcpiPlatformDxe/AcpiPlatformDxe.inf
   INF MdeModulePkg/Universal/Acpi/BootGraphicsResourceTableDxe/BootGraphicsResourceTableDxe.inf
-!if $(J313_AGX_G2_PROFILE) == TRUE
+!if $(J313_AGX_ABI_ADMISSION_PROFILE) == TRUE
+  INF RuleOverride=ACPITABLE MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTablesAgxAbiAdmission.inf
+!elseif $(J313_AGX_G2_PROFILE) == TRUE
   INF RuleOverride=ACPITABLE MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTablesG2.inf
 !else
   INF RuleOverride=ACPITABLE MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTables.inf
-!endif # J313_AGX_G2_PROFILE
+!endif # J313_AGX_ABI_ADMISSION_PROFILE / J313_AGX_G2_PROFILE
   INF RuleOverride=ACPITABLE T810XFamilyPkg/AcpiTables/CPUAcpiTables.inf
   #
   # The generic tables were missing here. AcpiPlatformDxe looks all three sets up by

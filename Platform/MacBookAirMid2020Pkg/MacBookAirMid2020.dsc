@@ -35,6 +35,8 @@
   NETWORK_TLS_ENABLE             = TRUE
   # Enumeration-only AGX G2 profile.  Stable builds must keep this FALSE.
   J313_AGX_G2_PROFILE            = FALSE
+  # Candidate-only synthetic-interrupt Full Graphics ABI admission profile.
+  J313_AGX_ABI_ADMISSION_PROFILE            = FALSE
 
 [BuildOptions.common]
   GCC:*_*_AARCH64_CC_FLAGS = -DSILICON_PLATFORM=8103
@@ -56,11 +58,13 @@
 
 [Components.common]
 
-!if $(J313_AGX_G2_PROFILE) == TRUE
+!if $(J313_AGX_ABI_ADMISSION_PROFILE) == TRUE
+  MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTablesAgxAbiAdmission.inf
+!elseif $(J313_AGX_G2_PROFILE) == TRUE
   MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTablesG2.inf
 !else
   MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTables.inf
-!endif # J313_AGX_G2_PROFILE
+!endif # J313_AGX_ABI_ADMISSION_PROFILE / J313_AGX_G2_PROFILE
 
   # Built as a standalone application, deliberately NOT packaged into the FV: it is copied
   # onto the embedded RAMDisk instead. Running it exercises LoadImage/StartImage from a FAT
