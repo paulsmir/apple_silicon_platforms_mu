@@ -93,6 +93,7 @@ FV = FVMAIN_COMPACT
 [FV.FvMain]
 BlockSize          = 0x40
 FvAlignment        = 8         # FV alignment and FV attributes setting.
+FvNameGuid         = 9F8549CE-4F07-4D1D-9A16-7C379FF4880D
 ERASE_POLARITY     = 1
 MEMORY_MAPPED      = TRUE
 STICKY_WRITE       = TRUE
@@ -341,6 +342,7 @@ READ_LOCK_STATUS   = TRUE
 
 [FV.FVMAIN_COMPACT]
 FvAlignment        = 8
+FvNameGuid         = 20B9ABC7-B2C5-4510-9979-AFC89D5080A7
 ERASE_POLARITY     = 1
 MEMORY_MAPPED      = TRUE
 STICKY_WRITE       = TRUE
