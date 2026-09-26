@@ -27,11 +27,12 @@
 #include <Library/PrintLib.h>
 #include <Library/AppleDTLib.h>
 #include <Library/VirtualDisplayValidation.h>
+#include <Library/AgxLocalReserveValidation.h>
 
 //Device memory map configuration file for UEFI (this is to help with pagetable initialization)
 #include <Library/T810XFamilyVirtualMemoryMapDefines.h>
 
-#define MAX_VIRTUAL_MEMORY_MAP_DESCRIPTORS 19  // +1 for the low-memory window
+#define MAX_VIRTUAL_MEMORY_MAP_DESCRIPTORS 20  // low-memory window and AGX broker
 
 #define DDR_ATTRIBUTES_CACHED           ARM_MEMORY_REGION_ATTRIBUTE_WRITE_BACK
 #define DDR_ATTRIBUTES_UNCACHED         ARM_MEMORY_REGION_ATTRIBUTE_UNCACHED_UNBUFFERED
@@ -137,6 +138,25 @@ STATIC VOID ReserveMemoryRegion ( IN EFI_PHYSICAL_ADDRESS ReservedRegionBase, IN
   }
 }
 
+STATIC BOOLEAN AgxLocalReserveHobContains (IN UINT64 Base)
+{
+  EFI_PEI_HOB_POINTERS Hob;
+  UINT64 End = Base + AGX_LOCAL_RESERVE_BYTES;
+
+  Hob.Raw = GetHobList ();
+  while ((Hob.Raw = GetNextHob (EFI_HOB_TYPE_RESOURCE_DESCRIPTOR, Hob.Raw)) != NULL) {
+    if (Hob.ResourceDescriptor->ResourceType == EFI_RESOURCE_SYSTEM_MEMORY &&
+        Base >= Hob.ResourceDescriptor->PhysicalStart &&
+        Hob.ResourceDescriptor->ResourceLength >= AGX_LOCAL_RESERVE_BYTES &&
+        End <= Hob.ResourceDescriptor->PhysicalStart +
+               Hob.ResourceDescriptor->ResourceLength) {
+      return TRUE;
+    }
+    Hob.Raw = GET_NEXT_HOB (Hob);
+  }
+  return FALSE;
+}
+
 
 //Borrowed from ArmPlatformPkg
 EFI_STATUS EFIAPI MemoryPeim(IN EFI_PHYSICAL_ADDRESS UefiMemoryBase, IN UINT64 UefiMemorySize)
@@ -149,6 +169,11 @@ EFI_STATUS EFIAPI MemoryPeim(IN EFI_PHYSICAL_ADDRESS UefiMemoryBase, IN UINT64 U
   EFI_PHYSICAL_ADDRESS          SystemMemoryTop;
   EFI_PHYSICAL_ADDRESS          ResourceTop;
   EFI_PHYSICAL_ADDRESS          FrameBufferBase;
+  EFI_PHYSICAL_ADDRESS          LocalBase;
+  UINT64                        LocalHostBase;
+  UINT64                        LocalBytes;
+  AGX_LOCAL_RANGE               LocalExcluded[4];
+  UINTN                         LocalExcludedCount;
   UINT64                        FrameBufferSize;
   BOOLEAN                       Found;
 
@@ -375,6 +400,48 @@ EFI_STATUS EFIAPI MemoryPeim(IN EFI_PHYSICAL_ADDRESS UefiMemoryBase, IN UINT64 U
       );
   }
 
+  // m1n1 selects the interval from the live guest layout and proves each
+  // stage-2 leaf. Mu owns the OS map: revalidate every known PEI reservation
+  // before punching the HOB hole. An invalid published receipt is fatal,
+  // because ACPI would otherwise assign pages still usable by DXE/Windows.
+  if (MmioRead32 (AGX_LOCAL_BROKER_BASE) == AGX_LOCAL_BROKER_MAGIC &&
+      MmioRead32 (AGX_LOCAL_BROKER_BASE + 4) == AGX_LOCAL_BROKER_VERSION &&
+      MmioRead32 (AGX_LOCAL_BROKER_BASE + 8) == 1) {
+    LocalBase = MmioRead64 (AGX_LOCAL_BROKER_BASE + 0x10);
+    LocalHostBase = MmioRead64 (AGX_LOCAL_BROKER_BASE + 0x18);
+    LocalBytes = MmioRead64 (AGX_LOCAL_BROKER_BASE + 0x20);
+    LocalExcludedCount = 0;
+    if (FrameBufferSize != 0) {
+      LocalExcluded[LocalExcludedCount++] = (AGX_LOCAL_RANGE){FrameBufferBase, FrameBufferSize};
+    }
+    if (PcdGet32 (PcdFdSize) != 0) {
+      LocalExcluded[LocalExcludedCount++] = (AGX_LOCAL_RANGE){PcdGet64 (PcdFdBaseAddress),
+                                                        PcdGet32 (PcdFdSize)};
+    }
+    if (PcdGet32 (PcdPreloadedRamdiskMaxSize) != 0) {
+      LocalExcluded[LocalExcludedCount++] = (AGX_LOCAL_RANGE){PcdGet64 (PcdPreloadedRamdiskBase),
+                                                        PcdGet32 (PcdPreloadedRamdiskMaxSize)};
+    }
+    if (PcdGet32 (PcdLowMemoryWindowSize) != 0) {
+      LocalExcluded[LocalExcludedCount++] = (AGX_LOCAL_RANGE){PcdGet64 (PcdLowMemoryWindowBackingBase),
+                                                        PcdGet32 (PcdLowMemoryWindowSize)};
+    }
+    if (LocalBytes != AGX_LOCAL_RESERVE_BYTES || LocalHostBase == 0 ||
+        (LocalHostBase & (AGX_LOCAL_RESERVE_BYTES - 1ULL)) != 0 ||
+        !AgxLocalReserveRangeValid (LocalBase, LocalBytes,
+                                    PcdGet64 (PcdSystemMemoryBase),
+                                    PcdGet64 (PcdSystemMemorySize),
+                                    LocalExcluded, LocalExcludedCount) ||
+        !AgxLocalReserveHobContains (LocalBase)) {
+      DEBUG ((DEBUG_ERROR, "MemoryInitPeiLib: invalid AGX local reserve receipt\n"));
+      return EFI_INVALID_PARAMETER;
+    }
+    DEBUG ((DEBUG_INFO, "MemoryInitPeiLib: AGX local reserve 0x%llx + 0x%llx PA=0x%llx\n",
+            LocalBase, LocalBytes, LocalHostBase));
+    ReserveMemoryRegion (LocalBase, (UINT32)AGX_LOCAL_RESERVE_BYTES);
+    BuildMemoryAllocationHob (LocalBase, AGX_LOCAL_RESERVE_BYTES, EfiReservedMemoryType);
+  }
+
   // Build Memory Allocation Hob
   InitMmu (MemoryTable);
 
@@ -428,6 +495,13 @@ VOID BuildVirtualMemoryMap(OUT ARM_MEMORY_REGION_DESCRIPTOR **VirtualMemoryMap)
   VirtualMemoryTable[Index].VirtualBase  = APPLE_CORE_SYSTEM_MMIO_RANGE_1_BASE;
   VirtualMemoryTable[Index].Length       = APPLE_CORE_SYSTEM_MMIO_RANGE_1_SIZE;
   VirtualMemoryTable[Index].Attributes   = ARM_MEMORY_REGION_ATTRIBUTE_DEVICE;
+
+  // Full-owner m1n1 exposes the local-memory handoff in an unused read-only
+  // subwindow of the synthetic broker. PEI and ACPI read the same values.
+  VirtualMemoryTable[++Index].PhysicalBase = AGX_LOCAL_BROKER_BASE & ~0xFFFULL;
+  VirtualMemoryTable[Index].VirtualBase    = AGX_LOCAL_BROKER_BASE & ~0xFFFULL;
+  VirtualMemoryTable[Index].Length         = 0x1000;
+  VirtualMemoryTable[Index].Attributes     = ARM_MEMORY_REGION_ATTRIBUTE_DEVICE;
 
   VirtualMemoryTable[++Index].PhysicalBase = APPLE_CORE_SYSTEM_MMIO_RANGE_2_BASE;
   VirtualMemoryTable[Index].VirtualBase    = APPLE_CORE_SYSTEM_MMIO_RANGE_2_BASE;

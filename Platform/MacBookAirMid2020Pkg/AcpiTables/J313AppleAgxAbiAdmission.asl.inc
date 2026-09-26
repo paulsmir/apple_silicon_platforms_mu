@@ -5,7 +5,12 @@ Device (AGX0)
     Name (_UID, Zero)
     Name (_CCA, One)
     Name (_STA, 0x0F)
-    Name (_CRS, ResourceTemplate ()
+    OperationRegion (LREG, SystemMemory, 0x0000000300000D00, 0x28)
+    Field (LREG, DWordAcc, NoLock, Preserve)
+    { LMAG, 32, LVER, 32, LVAL, 32 }
+    Field (LREG, QWordAcc, NoLock, Preserve)
+    { Offset (0x10), LIPA, 64, LHPA, 64, LBYT, 64 }
+    Name (BAS0, ResourceTemplate ()
     {
         QWordMemory (ResourceConsumer, PosDecode, MinFixed, MaxFixed,
             NonCacheable, ReadWrite, 0x0,
@@ -26,6 +31,45 @@ Device (AGX0)
         Interrupt (ResourceConsumer, Edge, ActiveHigh, Exclusive)
         { 889 }
     })
+    Name (LOCR, ResourceTemplate ()
+    {
+        QWordMemory (ResourceConsumer, PosDecode, MinFixed, MaxFixed,
+            NonCacheable, ReadWrite, 0x0,
+            0x0000000204000000, 0x0000000207FFFFFF, 0x0,
+            0x0000000004000000, ,, , AddressRangeMemory, TypeStatic)
+        QWordMemory (ResourceConsumer, PosDecode, MinFixed, MaxFixed,
+            NonCacheable, ReadWrite, 0x0,
+            0x00000009FFFB8000, 0x00000009FFFBBFFF, 0x0,
+            0x0000000000004000, ,, , AddressRangeMemory, TypeStatic)
+        QWordMemory (ResourceConsumer, PosDecode, MinFixed, MaxFixed,
+            NonCacheable, ReadWrite, 0x0,
+            0x00000009FFF70000, 0x00000009FFF73FFF, 0x0,
+            0x0000000000004000, ,, , AddressRangeMemory, TypeStatic)
+        QWordMemory (ResourceConsumer, PosDecode, MinFixed, MaxFixed,
+            NonCacheable, ReadWrite, 0x0,
+            0x0000000300000000, 0x0000000300000FFF, 0x0,
+            0x0000000000001000, ,, , AddressRangeMemory, TypeStatic)
+        QWordMemory (ResourceConsumer, PosDecode, MinFixed, MaxFixed,
+            NonCacheable, ReadWrite, 0x0,
+            0x0000000000000000, 0x0000000003FFFFFF, 0x0,
+            0x0000000004000000, ,, LRNG, AddressRangeMemory, TypeStatic)
+        Interrupt (ResourceConsumer, Edge, ActiveHigh, Exclusive)
+        { 889 }
+    })
+    Method (_CRS, 0, Serialized)
+    {
+        If ((LMAG == 0x4C584741) && (LVER == One) &&
+            (LVAL == One) && (LBYT == 0x4000000) &&
+            (LIPA != Zero) && (LHPA != Zero))
+        {
+            CreateQWordField (LOCR, ^LRNG._MIN, MMIN)
+            CreateQWordField (LOCR, ^LRNG._MAX, MMAX)
+            Store (LIPA, MMIN)
+            Store (Subtract (Add (LIPA, LBYT), One), MMAX)
+            Return (LOCR)
+        }
+        Return (BAS0)
+    }
     Name (_DSD, Package ()
     {
         ToUUID ("daffd814-6eba-4d8c-8a91-bc9bbf4aa301"),
@@ -33,6 +77,7 @@ Device (AGX0)
         {
             Package () { "agx-profile", "abi-admission" },
             Package () { "agx-abi-admission-version", 0x01 },
+            Package () { "agx-local-reserve-version", 0x01 },
             Package () { "agx-source-g2-sha256", "3d6570478a5b3003ef4ac91a73f64809eda18841169c39161f84fc256bf3416a" }
         }
     })
