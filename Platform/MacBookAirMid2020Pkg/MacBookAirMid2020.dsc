@@ -37,10 +37,16 @@
   J313_AGX_G2_PROFILE            = FALSE
   # Candidate-only synthetic-interrupt Full Graphics ABI admission profile.
   J313_AGX_ABI_ADMISSION_PROFILE            = FALSE
+  J313_AGX_RESERVE_V2_PROFILE                = FALSE
 
 [BuildOptions.common]
   GCC:*_*_AARCH64_CC_FLAGS = -DSILICON_PLATFORM=8103
+!if $(J313_AGX_RESERVE_V2_PROFILE) == TRUE
+  *_*_*_CC_FLAGS = -D DISABLE_NEW_DEPRECATED_INTERFACES -D HAS_MEMCPY_INTRINSICS -DAGX_LOCAL_RESERVE_V2
+  *_*_*_ASLPP_FLAGS = -DAGX_LOCAL_RESERVE_V2
+!else
   *_*_*_CC_FLAGS = -D DISABLE_NEW_DEPRECATED_INTERFACES -D HAS_MEMCPY_INTRINSICS
+!endif
 
 [PcdsFixedAtBuild.common]
   gAppleSiliconPkgTokenSpaceGuid.PcdSmbiosSystemModel|"MacBook Air (Mid 2020)"

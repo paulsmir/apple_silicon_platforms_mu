@@ -158,6 +158,40 @@ STATIC BOOLEAN AgxLocalReserveHobContains (IN UINT64 Base)
 }
 
 
+STATIC BOOLEAN AgxLocalReserveHobsSafe (IN UINT64 Base)
+{
+  EFI_PEI_HOB_POINTERS Hob;
+  Hob.Raw = GetHobList ();
+  while (!END_OF_HOB_LIST (Hob)) {
+    UINT64 Other = 0;
+    UINT64 Size = 0;
+    switch (Hob.Header->HobType) {
+    case EFI_HOB_TYPE_HANDOFF:
+      Other = Hob.HandoffInformationTable->EfiMemoryBottom;
+      if (Hob.HandoffInformationTable->EfiMemoryTop <= Other) return FALSE;
+      Size = Hob.HandoffInformationTable->EfiMemoryTop - Other;
+      break;
+    case EFI_HOB_TYPE_MEMORY_ALLOCATION:
+      Other = Hob.MemoryAllocation->AllocDescriptor.MemoryBaseAddress;
+      Size = Hob.MemoryAllocation->AllocDescriptor.MemoryLength;
+      break;
+    case EFI_HOB_TYPE_FV:
+    case EFI_HOB_TYPE_FV2:
+    case EFI_HOB_TYPE_FV3:
+      // FV/FV2/FV3 share Header, BaseAddress and Length as their prefix.
+      Other = Hob.FirmwareVolume->BaseAddress;
+      Size = Hob.FirmwareVolume->Length;
+      break;
+    default:
+      Hob.Raw = GET_NEXT_HOB (Hob);
+      continue;
+    }
+    if (!AgxLocalReserveDisjoint (Base, Other, Size)) return FALSE;
+    Hob.Raw = GET_NEXT_HOB (Hob);
+  }
+  return TRUE;
+}
+
 //Borrowed from ArmPlatformPkg
 EFI_STATUS EFIAPI MemoryPeim(IN EFI_PHYSICAL_ADDRESS UefiMemoryBase, IN UINT64 UefiMemorySize)
 {
@@ -172,7 +206,7 @@ EFI_STATUS EFIAPI MemoryPeim(IN EFI_PHYSICAL_ADDRESS UefiMemoryBase, IN UINT64 U
   EFI_PHYSICAL_ADDRESS          LocalBase;
   UINT64                        LocalHostBase;
   UINT64                        LocalBytes;
-  AGX_LOCAL_RANGE               LocalExcluded[4];
+  AGX_LOCAL_RANGE               LocalExcluded[5];
   UINTN                         LocalExcludedCount;
   UINT64                        FrameBufferSize;
   BOOLEAN                       Found;
@@ -404,6 +438,15 @@ EFI_STATUS EFIAPI MemoryPeim(IN EFI_PHYSICAL_ADDRESS UefiMemoryBase, IN UINT64 U
   // stage-2 leaf. Mu owns the OS map: revalidate every known PEI reservation
   // before punching the HOB hole. An invalid published receipt is fatal,
   // because ACPI would otherwise assign pages still usable by DXE/Windows.
+#ifdef AGX_LOCAL_RESERVE_V2
+  // New AML must never run on a missing, old, or unpublished receipt.
+  if (MmioRead32 (AGX_LOCAL_BROKER_BASE) != AGX_LOCAL_BROKER_MAGIC ||
+      MmioRead32 (AGX_LOCAL_BROKER_BASE + 4) != AGX_LOCAL_BROKER_VERSION ||
+      MmioRead32 (AGX_LOCAL_BROKER_BASE + 8) != 1) {
+    DEBUG ((DEBUG_ERROR, "MemoryInitPeiLib: reserve v2 receipt required\n"));
+    return EFI_INCOMPATIBLE_VERSION;
+  }
+#endif
   if (MmioRead32 (AGX_LOCAL_BROKER_BASE) == AGX_LOCAL_BROKER_MAGIC &&
       MmioRead32 (AGX_LOCAL_BROKER_BASE + 4) == AGX_LOCAL_BROKER_VERSION &&
       MmioRead32 (AGX_LOCAL_BROKER_BASE + 8) == 1) {
@@ -411,6 +454,7 @@ EFI_STATUS EFIAPI MemoryPeim(IN EFI_PHYSICAL_ADDRESS UefiMemoryBase, IN UINT64 U
     LocalHostBase = MmioRead64 (AGX_LOCAL_BROKER_BASE + 0x18);
     LocalBytes = MmioRead64 (AGX_LOCAL_BROKER_BASE + 0x20);
     LocalExcludedCount = 0;
+    LocalExcluded[LocalExcludedCount++] = (AGX_LOCAL_RANGE){UefiMemoryBase, UefiMemorySize};
     if (FrameBufferSize != 0) {
       LocalExcluded[LocalExcludedCount++] = (AGX_LOCAL_RANGE){FrameBufferBase, FrameBufferSize};
     }
@@ -427,7 +471,9 @@ EFI_STATUS EFIAPI MemoryPeim(IN EFI_PHYSICAL_ADDRESS UefiMemoryBase, IN UINT64 U
                                                         PcdGet32 (PcdLowMemoryWindowSize)};
     }
     if (LocalBytes != AGX_LOCAL_RESERVE_BYTES || LocalHostBase == 0 ||
-        (LocalHostBase & (AGX_LOCAL_RESERVE_BYTES - 1ULL)) != 0 ||
+        (LocalHostBase & (AGX_LOCAL_RESERVE_ALIGNMENT - 1ULL)) != 0 ||
+        LocalHostBase != LocalBase ||
+        !AgxLocalReserveHobsSafe (LocalBase) ||
         !AgxLocalReserveRangeValid (LocalBase, LocalBytes,
                                     PcdGet64 (PcdSystemMemoryBase),
                                     PcdGet64 (PcdSystemMemorySize),

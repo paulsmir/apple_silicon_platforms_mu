@@ -79,6 +79,8 @@ VOID Main(IN VOID *StackBase, IN UINTN StackSize, IN VOID *DeviceTreePtr, IN UIN
     DEBUG(
         (EFI_D_INFO | EFI_D_LOAD, 
         "Beginning memory hand off block setup.\n"));
+    // Publish the live stack before MemoryPeim validates a firmware reserve.
+    BuildStackHob((UINT64)StackBase, StackSize);
     Status = MemoryPeim(UefiMemoryBase, UefiMemoryLength);
     if(EFI_ERROR(Status))
     {
@@ -101,7 +103,6 @@ VOID Main(IN VOID *StackBase, IN UINTN StackSize, IN VOID *DeviceTreePtr, IN UIN
     //set up stack and CPU HOBs
     DEBUG((EFI_D_INFO | EFI_D_LOAD, "Building up Stack/CPU HOBs\n"));
     DEBUG((EFI_D_INFO | EFI_D_LOAD, "Stack Base: 0x%llx, Stack Size: 0x%llx\n", (UINT64)StackBase, StackSize));
-    BuildStackHob((UINT64)StackBase, StackSize);
     BuildCpuHob(ArmGetPhysicalAddressBits(), PcdGet8(PcdPrePiCpuIoSize));
 
     DEBUG((EFI_D_INFO | EFI_D_LOAD, "Setting boot mode to default settings...\n"));
