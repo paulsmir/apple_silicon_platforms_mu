@@ -59,23 +59,32 @@ BootRamdiskHelperDxeInitialize (
     // Prefer an image preloaded into guest RAM over one embedded in the firmware volume.
     // FvMain is decompressed in its entirety during PrePi, so anything past a few tens of
     // megabytes dies there with Out of Resources - a WinPE image cannot travel that way.
-    // The window is carved out of the memory map in MemoryInitPeiLib, so the image can be
-    // handed to the RAMDisk protocol in place, with no copy.
+    // MemoryInitPeiLib carved the window out of the memory map only when the launcher's
+    // header was valid and recorded that decision in a HOB (M1); without that decision the
+    // window is system memory and nothing in it may be registered.
     //
     if(PcdGet64(PcdPreloadedRamdiskBase) != 0) {
-        PRELOADED_RAMDISK_HEADER *Header = (VOID *)(UINTN)PcdGet64(PcdPreloadedRamdiskBase);
+        EFI_HOB_GUID_TYPE                 *DecisionHob;
+        CONST PRELOADED_RAMDISK_DECISION  *Decision = NULL;
 
-        if(CompareMem(Header->Magic, PRELOADED_RAMDISK_MAGIC, sizeof(Header->Magic)) == 0) {
-            UINT64 PayloadBase = PcdGet64(PcdPreloadedRamdiskBase) + PRELOADED_RAMDISK_PAYLOAD_OFFSET;
+        DecisionHob = GetFirstGuidHob(&gAppleSiliconPkgPreloadedRamdiskDecisionGuid);
+        if((DecisionHob != NULL) &&
+           (GET_GUID_HOB_DATA_SIZE(DecisionHob) == sizeof(PRELOADED_RAMDISK_DECISION))) {
+            Decision = GET_GUID_HOB_DATA(DecisionHob);
+        }
 
-            if((Header->Size == 0) ||
-               (Header->Size > PcdGet32(PcdPreloadedRamdiskMaxSize) - PRELOADED_RAMDISK_PAYLOAD_OFFSET)) {
-                DEBUG((DEBUG_ERROR, "BootRamdiskHelperDxe: preloaded RAMDisk size 0x%llx is out of range\n", Header->Size));
+        if((Decision != NULL) && (Decision->Version == PRELOADED_RAMDISK_DECISION_VERSION) &&
+           (Decision->Present != 0)) {
+            if((Decision->PayloadBase != PcdGet64(PcdPreloadedRamdiskBase) + PRELOADED_RAMDISK_PAYLOAD_OFFSET) ||
+               (Decision->PayloadSize == 0) ||
+               (Decision->PayloadSize > PcdGet32(PcdPreloadedRamdiskMaxSize) - PRELOADED_RAMDISK_PAYLOAD_OFFSET)) {
+                DEBUG((DEBUG_ERROR, "BootRamdiskHelperDxe: preloaded RAMDisk decision 0x%llx + 0x%llx is out of range\n",
+                       Decision->PayloadBase, Decision->PayloadSize));
                 return EFI_VOLUME_CORRUPTED;
             }
 
             DEBUG((DEBUG_ERROR, "BootRamdiskHelperDxe: preloaded RAMDisk at 0x%llx, 0x%llx bytes\n",
-                   PayloadBase, Header->Size));
+                   Decision->PayloadBase, Decision->PayloadSize));
 
             Status = gBS->LocateProtocol(&gEfiRamDiskProtocolGuid, NULL, (VOID **)&RamdiskProtocol);
             if (EFI_ERROR (Status)) {
@@ -83,7 +92,7 @@ BootRamdiskHelperDxeInitialize (
                 return Status;
             }
 
-            Status = RamdiskProtocol->Register(PayloadBase, Header->Size, RamDiskRegisterType, NULL, &DevicePath);
+            Status = RamdiskProtocol->Register(Decision->PayloadBase, Decision->PayloadSize, RamDiskRegisterType, NULL, &DevicePath);
             if (EFI_ERROR (Status)) {
                 DEBUG ((DEBUG_ERROR, "BootRamdiskHelperDxe: Cannot register preloaded RAM Disk - %r\n", Status));
             }

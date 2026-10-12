@@ -34,6 +34,7 @@
   PrintLib
   UefiHiiServicesLib
   UefiBootManagerLib
+  HobLib
 
 [Protocols]
   gEfiRamDiskProtocolGuid                         ## SOMETIMES_CONSUMES
@@ -45,6 +46,7 @@
   gEfiVirtualCdGuid            ## SOMETIMES_CONSUMES ## GUID
   gEfiVirtualDiskGuid          ## SOMETIMES_CONSUMES ## GUID
   gAppleSiliconPkgEmbeddedRamdiskGuid
+  gAppleSiliconPkgPreloadedRamdiskDecisionGuid  ## SOMETIMES_CONSUMES ## HOB
 
 [Pcd.common]
   gAppleSiliconPkgTokenSpaceGuid.PcdInitializeRamdisk

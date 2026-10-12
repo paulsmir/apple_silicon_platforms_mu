@@ -28,6 +28,7 @@
 #include <Library/AppleDTLib.h>
 #include <Library/VirtualDisplayValidation.h>
 #include <Library/AgxLocalReserveValidation.h>
+#include <Library/PreloadedRamdisk.h>
 
 //Device memory map configuration file for UEFI (this is to help with pagetable initialization)
 #include <Library/T810XFamilyVirtualMemoryMapDefines.h>
@@ -210,6 +211,8 @@ EFI_STATUS EFIAPI MemoryPeim(IN EFI_PHYSICAL_ADDRESS UefiMemoryBase, IN UINT64 U
   UINTN                         LocalExcludedCount;
   UINT64                        FrameBufferSize;
   BOOLEAN                       Found;
+  CONST PRELOADED_RAMDISK_HEADER  *RamdiskHeader;
+  PRELOADED_RAMDISK_DECISION    RamdiskDecision;
 
   // build up virtual memory map
   BuildVirtualMemoryMap(&MemoryTable);
@@ -402,13 +405,35 @@ EFI_STATUS EFIAPI MemoryPeim(IN EFI_PHYSICAL_ADDRESS UefiMemoryBase, IN UINT64 U
   // the image is written straight into guest memory instead and only registered here.
   // Punching the hole in PEI is what keeps DXE from allocating over it.
   //
+  // M1: only a launcher that preloaded an image writes its header (run_uefi.py clears
+  // the header page otherwise, and publishes the window to m1n1 as a ramdisk region so
+  // GPU DMA stays out of it). Without a valid header the window stays system memory.
+  // DXE registers a RAM disk only from the decision HOB built here.
+  //
   if ((PcdGet64 (PcdPreloadedRamdiskBase) != 0) && (PcdGet32 (PcdPreloadedRamdiskMaxSize) != 0)) {
-    DEBUG ((DEBUG_INFO, "MemoryInitPeiLib: reserving preloaded RAMDisk window 0x%llx + 0x%x\n",
-            PcdGet64 (PcdPreloadedRamdiskBase), PcdGet32 (PcdPreloadedRamdiskMaxSize)));
-    ReserveMemoryRegion (
-      PcdGet64 (PcdPreloadedRamdiskBase),
-      PcdGet32 (PcdPreloadedRamdiskMaxSize)
-      );
+    RamdiskDecision.Version = PRELOADED_RAMDISK_DECISION_VERSION;
+    RamdiskDecision.Present = 0;
+    RamdiskDecision.PayloadBase = 0;
+    RamdiskDecision.PayloadSize = 0;
+    RamdiskHeader = (CONST PRELOADED_RAMDISK_HEADER *)(UINTN)PcdGet64 (PcdPreloadedRamdiskBase);
+    if (PreloadedRamdiskHeaderValid (RamdiskHeader, PcdGet64 (PcdPreloadedRamdiskBase),
+                                     PcdGet32 (PcdPreloadedRamdiskMaxSize)))
+    {
+      DEBUG ((DEBUG_INFO, "MemoryInitPeiLib: reserving preloaded RAMDisk window 0x%llx + 0x%x\n",
+              PcdGet64 (PcdPreloadedRamdiskBase), PcdGet32 (PcdPreloadedRamdiskMaxSize)));
+      ReserveMemoryRegion (
+        PcdGet64 (PcdPreloadedRamdiskBase),
+        PcdGet32 (PcdPreloadedRamdiskMaxSize)
+        );
+      RamdiskDecision.Present = 1;
+      RamdiskDecision.PayloadBase = PcdGet64 (PcdPreloadedRamdiskBase) + PRELOADED_RAMDISK_PAYLOAD_OFFSET;
+      RamdiskDecision.PayloadSize = RamdiskHeader->Size;
+    } else {
+      DEBUG ((DEBUG_INFO, "MemoryInitPeiLib: no preloaded RAMDisk header at 0x%llx; window is system memory\n",
+              PcdGet64 (PcdPreloadedRamdiskBase)));
+    }
+
+    BuildGuidDataHob (&gAppleSiliconPkgPreloadedRamdiskDecisionGuid, &RamdiskDecision, sizeof (RamdiskDecision));
   }
 
   //

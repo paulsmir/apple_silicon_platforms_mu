@@ -38,6 +38,7 @@
 
 [Guids]
   gEfiMemoryTypeInformationGuid
+  gAppleSiliconPkgPreloadedRamdiskDecisionGuid  ## PRODUCES ## HOB
 
 [FeaturePcd]
   gEmbeddedTokenSpaceGuid.PcdPrePiProduceMemoryTypeInformationHob
