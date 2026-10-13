@@ -139,16 +139,16 @@ STATIC VOID ReserveMemoryRegion ( IN EFI_PHYSICAL_ADDRESS ReservedRegionBase, IN
   }
 }
 
-STATIC BOOLEAN AgxLocalReserveHobContains (IN UINT64 Base)
+STATIC BOOLEAN AgxLocalReserveHobContains (IN UINT64 Base, IN UINT64 Bytes)
 {
   EFI_PEI_HOB_POINTERS Hob;
-  UINT64 End = Base + AGX_LOCAL_RESERVE_BYTES;
+  UINT64 End = Base + Bytes;
 
   Hob.Raw = GetHobList ();
   while ((Hob.Raw = GetNextHob (EFI_HOB_TYPE_RESOURCE_DESCRIPTOR, Hob.Raw)) != NULL) {
     if (Hob.ResourceDescriptor->ResourceType == EFI_RESOURCE_SYSTEM_MEMORY &&
         Base >= Hob.ResourceDescriptor->PhysicalStart &&
-        Hob.ResourceDescriptor->ResourceLength >= AGX_LOCAL_RESERVE_BYTES &&
+        Hob.ResourceDescriptor->ResourceLength >= Bytes &&
         End <= Hob.ResourceDescriptor->PhysicalStart +
                Hob.ResourceDescriptor->ResourceLength) {
       return TRUE;
@@ -159,7 +159,7 @@ STATIC BOOLEAN AgxLocalReserveHobContains (IN UINT64 Base)
 }
 
 
-STATIC BOOLEAN AgxLocalReserveHobsSafe (IN UINT64 Base)
+STATIC BOOLEAN AgxLocalReserveHobsSafe (IN UINT64 Base, IN UINT64 Bytes)
 {
   EFI_PEI_HOB_POINTERS Hob;
   Hob.Raw = GetHobList ();
@@ -187,7 +187,7 @@ STATIC BOOLEAN AgxLocalReserveHobsSafe (IN UINT64 Base)
       Hob.Raw = GET_NEXT_HOB (Hob);
       continue;
     }
-    if (!AgxLocalReserveDisjoint (Base, Other, Size)) return FALSE;
+    if (!AgxLocalReserveDisjoint (Base, Bytes, Other, Size)) return FALSE;
     Hob.Raw = GET_NEXT_HOB (Hob);
   }
   return TRUE;
@@ -468,7 +468,7 @@ EFI_STATUS EFIAPI MemoryPeim(IN EFI_PHYSICAL_ADDRESS UefiMemoryBase, IN UINT64 U
   if (MmioRead32 (AGX_LOCAL_BROKER_BASE) != AGX_LOCAL_BROKER_MAGIC ||
       MmioRead32 (AGX_LOCAL_BROKER_BASE + 4) != AGX_LOCAL_BROKER_VERSION ||
       MmioRead32 (AGX_LOCAL_BROKER_BASE + 8) != 1) {
-    DEBUG ((DEBUG_ERROR, "MemoryInitPeiLib: reserve v2 receipt required\n"));
+    DEBUG ((DEBUG_ERROR, "MemoryInitPeiLib: reserve receipt v3 required\n"));
     return EFI_INCOMPATIBLE_VERSION;
   }
 #endif
@@ -495,22 +495,23 @@ EFI_STATUS EFIAPI MemoryPeim(IN EFI_PHYSICAL_ADDRESS UefiMemoryBase, IN UINT64 U
       LocalExcluded[LocalExcludedCount++] = (AGX_LOCAL_RANGE){PcdGet64 (PcdLowMemoryWindowBackingBase),
                                                         PcdGet32 (PcdLowMemoryWindowSize)};
     }
-    if (LocalBytes != AGX_LOCAL_RESERVE_BYTES || LocalHostBase == 0 ||
+    if (!AgxLocalReserveSizeValid (LocalBytes) || LocalHostBase == 0 ||
         (LocalHostBase & (AGX_LOCAL_RESERVE_ALIGNMENT - 1ULL)) != 0 ||
         LocalHostBase != LocalBase ||
-        !AgxLocalReserveHobsSafe (LocalBase) ||
+        !AgxLocalReserveHobsSafe (LocalBase, LocalBytes) ||
         !AgxLocalReserveRangeValid (LocalBase, LocalBytes,
                                     PcdGet64 (PcdSystemMemoryBase),
                                     PcdGet64 (PcdSystemMemorySize),
                                     LocalExcluded, LocalExcludedCount) ||
-        !AgxLocalReserveHobContains (LocalBase)) {
+        !AgxLocalReserveHobContains (LocalBase, LocalBytes)) {
       DEBUG ((DEBUG_ERROR, "MemoryInitPeiLib: invalid AGX local reserve receipt\n"));
       return EFI_INVALID_PARAMETER;
     }
     DEBUG ((DEBUG_INFO, "MemoryInitPeiLib: AGX local reserve 0x%llx + 0x%llx PA=0x%llx\n",
             LocalBase, LocalBytes, LocalHostBase));
-    ReserveMemoryRegion (LocalBase, (UINT32)AGX_LOCAL_RESERVE_BYTES);
-    BuildMemoryAllocationHob (LocalBase, AGX_LOCAL_RESERVE_BYTES, EfiReservedMemoryType);
+    // M2-f2c: exactly the published size; the rest stays system memory.
+    ReserveMemoryRegion (LocalBase, (UINT32)LocalBytes);
+    BuildMemoryAllocationHob (LocalBase, LocalBytes, EfiReservedMemoryType);
   }
 
   // Build Memory Allocation Hob
